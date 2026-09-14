@@ -1,5 +1,9 @@
 import url from "node:url";
-import { init, parse } from "es-module-lexer";
+// The minimal build keeps the v2 import record shape (`s`/`e` specifier offsets) that the
+// rewrite below relies on. The default entry point in es-module-lexer 3 reports tagged
+// records with renamed fields, so `s` and `e` read as undefined there and every import was
+// replaced with the whole module source.
+import { init, parse } from "es-module-lexer/minimal";
 import type { AvailableCDNs, Dependency, PluginOptions } from "./types";
 
 const isUrl = (value: string) => /^(http(s){0,1}:){0,1}\/\//.test(value);
@@ -55,7 +59,7 @@ export async function loadHook(key: string, options: PluginOptions) {
 	const dependency = await resolveDependency(key, options);
 	if (!dependency) return;
 
-	await init;
+	await init();
 
 	const [imports] = parse(dependency.main);
 
