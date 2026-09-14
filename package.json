@@ -1,6 +1,6 @@
 {
 	"name": "rollup-plugin-import-cdn",
-	"version": "0.3.0",
+	"version": "0.3.1",
 	"description": "Import and transform modules from a CDN to rollup",
 	"type": "module",
 	"sideEffects": false,
