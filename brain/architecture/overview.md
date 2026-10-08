@@ -24,5 +24,4 @@ rollup-plugin-import-cdn lets Rollup import ESM packages and URLs from a CDN and
 Read from `src/load.ts` on 2026-10-08, not covered by a test:
 
 - No cache. `resolveId` fetches a module to resolve it and `load` fetches it again.
-- `response.ok` is never read. Only a thrown fetch moves on to the next CDN, so an error page served with a 404 status would be returned as the module source. The tests' mock fetch throws on a miss (`src/integration.test.ts`), so this path is untested.
 - `src/load.ts` imports `node:url`, so the plugin runs where Rollup runs on Node, not in a browser build of Rollup.

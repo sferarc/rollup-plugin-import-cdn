@@ -42,6 +42,8 @@ export async function resolveDependency(
 	for (const cdnUrl of urls) {
 		try {
 			const response = await fetchImpl(cdnUrl);
+			// A CDN that answers 404 or 500 still resolves the fetch, and its error page is not a module.
+			if (!response.ok) throw new Error(`${cdnUrl} answered with a non-OK status`);
 			const main = await response.text();
 
 			return { name, url: response.url, main };

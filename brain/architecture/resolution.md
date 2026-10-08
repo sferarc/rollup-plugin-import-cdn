@@ -14,6 +14,6 @@ The importer is not consulted, so a path without a leading `./` is treated as a 
 
 ## Fallback
 
-`resolveDependency` tries the URLs in order and returns the first whose `fetchImpl` call and `text()` do not throw, recording `response.url` so redirects are followed for later rewriting ([[import-rewriting]]). A failure is logged with `console.debug`; when every URL fails it warns `Could not resolve dependency` and returns `null` (`src/load.test.ts`, "should try multiple CDNs in priority order", "should return null when all CDNs fail").
+`resolveDependency` tries the URLs in order and returns the first whose `fetchImpl` call and `text()` do not throw and whose response has `ok` set, recording `response.url` so redirects are followed for later rewriting ([[import-rewriting]]). A failure is logged with `console.debug`; when every URL fails it warns `Could not resolve dependency` and returns `null` (`src/load.test.ts`, "should try multiple CDNs in priority order", "should return null when all CDNs fail"). A non-OK status, such as a 404 error page, is treated the same as a thrown fetch ("should skip a CDN that answers with a non-OK status").
 
 Adding a built-in CDN means extending `AvailableCDNs` in `src/types.ts` and the `parseCDN` map in `src/load.ts`. Skypack is the only one today.
