@@ -8,9 +8,10 @@
 	"author": "SferaDev",
 	"repository": {
 		"type": "git",
-		"url": "https://github.com/SferaDev/SferaDev.git",
-		"directory": "packages/rollup-plugin-import-cdn"
+		"url": "git+https://github.com/sferarc/rollup-plugin-import-cdn.git"
 	},
+	"homepage": "https://github.com/sferarc/rollup-plugin-import-cdn#readme",
+	"bugs": "https://github.com/sferarc/rollup-plugin-import-cdn/issues",
 	"keywords": [
 		"rollup",
 		"plugin",
@@ -38,9 +39,14 @@
 		"dev": "bunchee --watch",
 		"test": "vitest run",
 		"test:watch": "vitest",
-		"tsc": "tsc --noEmit",
+		"typecheck": "tsc --noEmit",
+		"lint": "biome check .",
+		"fix": "biome check --write .",
+		"knip": "knip",
 		"is-tree-shakable": "is-tree-shakable",
-		"clean": "rm -rf .turbo && rm -rf node_modules && rm -rf dist"
+		"changeset": "changeset",
+		"release": "pnpm build && changeset publish",
+		"clean": "rm -rf dist node_modules"
 	},
 	"dependencies": {
 		"es-module-lexer": "catalog:"
@@ -49,9 +55,14 @@
 		"rollup": "^3.0.0 || ^4.0.0"
 	},
 	"devDependencies": {
-		"@sferadev/tsconfig": "workspace:*",
+		"@biomejs/biome": "catalog:",
+		"@changesets/cli": "catalog:",
 		"@types/node": "catalog:",
+		"@typescript/typescript6": "catalog:",
 		"bunchee": "catalog:",
+		"is-tree-shakable": "catalog:",
+		"knip": "catalog:",
+		"lefthook": "catalog:",
 		"rollup": "catalog:",
 		"typescript": "catalog:",
 		"vitest": "catalog:"
@@ -59,5 +70,6 @@
 	"publishConfig": {
 		"access": "public",
 		"provenance": true
-	}
+	},
+	"packageManager": "pnpm@12.10.1"
 }

@@ -66,3 +66,15 @@ For full documentation including configuration options, API reference, and examp
 ## License
 
 ISC
+
+## Development
+
+The toolchain is pinned in `mise.toml`. With [mise](https://mise.jdx.dev) installed:
+
+```bash
+mise install
+pnpm install
+pnpm lint && pnpm typecheck && pnpm test && pnpm build
+```
+
+Add a changeset with `pnpm changeset` for any change that should be released.
