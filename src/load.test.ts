@@ -118,6 +118,42 @@ describe("resolveDependency", () => {
 		});
 	});
 
+	it("should skip a CDN that answers with a non-OK status", async () => {
+		const mockContent = "export const fallback = true;";
+		const options: PluginOptions = {
+			fetchImpl: async (url: string) => {
+				if (url === "https://cdn.skypack.dev/package") {
+					return { ok: false, url, text: async () => "Not Found" };
+				}
+				return { ok: true, url, text: async () => mockContent };
+			},
+			priority: ["skypack", (key) => `https://esm.sh/${key}`],
+		};
+
+		const result = await resolveDependency("package", options);
+
+		expect(result).toEqual({
+			name: "package",
+			url: "https://esm.sh/package",
+			main: mockContent,
+		});
+	});
+
+	it("should return null when every CDN answers with a non-OK status", async () => {
+		const consoleSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+		const options: PluginOptions = {
+			fetchImpl: async (url: string) => ({ ok: false, url, text: async () => "Not Found" }),
+		};
+
+		const result = await resolveDependency("missing", options);
+
+		expect(result).toBeNull();
+		expect(consoleSpy).toHaveBeenCalledWith(
+			"[rollup-plugin-import-cdn] Could not resolve dependency missing",
+		);
+		consoleSpy.mockRestore();
+	});
+
 	it("should return null when all CDNs fail", async () => {
 		const consoleSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
 		const options: PluginOptions = {
