@@ -120,12 +120,11 @@ export async function loadHook(key: string, options: PluginOptions) {
 			// `import.meta` expression itself, not a specifier.
 			if (d === -2) return undefined;
 
-			const string = dependency.main.slice(s, e);
+			// Dynamic imports (d > -1) are left alone. Their span is the whole argument,
+			// quotes included, so rewriting it would put the quotes inside the URL.
+			if (d > -1) return undefined;
 
-			const variable = dependency.main.slice(s - 1, e + 1);
-			if (variable.startsWith("(") && variable.endsWith(")")) {
-				return undefined;
-			}
+			const string = dependency.main.slice(s, e);
 
 			return !isUrl(string) ? { string, start: s, end: e } : undefined;
 		})
