@@ -11,6 +11,8 @@ export type FetchImpl = (
 }>;
 
 export interface PluginOptions {
+	/** Directory for an on-disk cache of responses, used only for URLs pinned to an exact version. */
+	cache?: string;
 	fetchImpl: FetchImpl;
 	priority?: Array<AvailableCDNs | ((key: string) => string)>;
 	versions?: Record<string, string>;
