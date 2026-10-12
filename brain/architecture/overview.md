@@ -18,11 +18,12 @@ rollup-plugin-import-cdn lets Rollup import ESM packages and URLs from a CDN and
 - `fetchImpl`: optional. Defaults to the global `fetch`; `importCdn` throws if neither exists (`src/index.ts`, `src/index.test.ts`).
 - `priority`: CDNs to try in order, each `"skypack"` or a function from specifier to URL. Defaults to `["skypack"]`.
 - `versions`: a map from specifier to version, applied only to the built-in `skypack` entry.
+- `cache`: optional directory. When set, a response for a URL containing an exact `@x.y.z` is stored as `<sha256 of the URL>.json` (`url` after redirects, and `main`) and read back instead of fetching; read and write failures fall back to a fetch (`src/load.ts`, `src/load.test.ts`).
 
 ## Things the code does not do
 
 Read from `src/load.ts` on 2026-10-08, not covered by a test:
 
-- No cache. `resolveId` fetches a module to resolve it and `load` fetches it again.
+- No cache unless `cache` is set, and then only for versioned URLs. Otherwise `resolveId` fetches a module to resolve it and `load` fetches it again.
 - A non-OK response from every CDN fails the build with an error naming the URL and status (`src/load.test.ts`); a non-OK response from one CDN moves on to the next.
 - `src/load.ts` imports `node:url`, so the plugin runs where Rollup runs on Node, not in a browser build of Rollup.

@@ -48,6 +48,17 @@ importCdn({
 });
 ```
 
+### Fetch Cache
+
+```js
+importCdn({
+  cache: "node_modules/.cache/import-cdn",
+  versions: { lodash: "4.17.21" },
+});
+```
+
+With `cache` set, responses for URLs pinned to an exact version (`pkg@1.2.3`) are stored in that directory and reused by later builds. Unpinned URLs are always fetched.
+
 ### Custom CDN
 
 ```js

@@ -1,4 +1,7 @@
-import { describe, expect, it, vi } from "vitest";
+import { mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { loadHook, resolveDependency } from "./load";
 import type { FetchImpl, PluginOptions } from "./types";
 
@@ -235,5 +238,103 @@ export const combined = a + b;`;
 		const result = await loadHook("https://cdn.skypack.dev/deep/nested/package", options);
 
 		expect(result).toContain("https://cdn.skypack.dev/deep/parent/module.js");
+	});
+});
+
+describe("resolveDependency cache", () => {
+	let cache: string;
+
+	beforeEach(async () => {
+		cache = await mkdtemp(path.join(tmpdir(), "import-cdn-cache-"));
+	});
+
+	afterEach(async () => {
+		await rm(cache, { recursive: true, force: true });
+	});
+
+	const countingFetch =
+		(calls: string[]): FetchImpl =>
+		async (url) => {
+			calls.push(url);
+			return { ok: true, url: `${url}/resolved.js`, text: async () => `export default "${url}";` };
+		};
+
+	it("should not refetch a pinned URL on the next resolve", async () => {
+		const calls: string[] = [];
+		const options: PluginOptions = {
+			cache,
+			fetchImpl: countingFetch(calls),
+			versions: { lodash: "4.17.21" },
+		};
+
+		const first = await resolveDependency("lodash", options);
+		const second = await resolveDependency("lodash", options);
+
+		expect(calls).toEqual(["https://cdn.skypack.dev/lodash@4.17.21"]);
+		expect(second).toEqual(first);
+		expect(second?.url).toBe("https://cdn.skypack.dev/lodash@4.17.21/resolved.js");
+	});
+
+	it("should share the cache between plugin instances", async () => {
+		const calls: string[] = [];
+		const options: PluginOptions = { cache, fetchImpl: countingFetch(calls) };
+
+		await resolveDependency("https://esm.sh/react@18.2.0", options);
+		await resolveDependency("https://esm.sh/react@18.2.0", { ...options });
+
+		expect(calls).toHaveLength(1);
+	});
+
+	it("should refetch URLs that are not pinned to an exact version", async () => {
+		const calls: string[] = [];
+		const options: PluginOptions = {
+			cache,
+			fetchImpl: countingFetch(calls),
+			versions: { react: "^18.2.0" },
+		};
+
+		await resolveDependency("react", options);
+		await resolveDependency("react", options);
+		await resolveDependency("lodash", options);
+		await resolveDependency("lodash", options);
+
+		expect(calls).toHaveLength(4);
+		expect(await readdir(cache)).toEqual([]);
+	});
+
+	it("should not cache without the option", async () => {
+		const calls: string[] = [];
+		const options: PluginOptions = {
+			fetchImpl: countingFetch(calls),
+			versions: { lodash: "4.17.21" },
+		};
+
+		await resolveDependency("lodash", options);
+		await resolveDependency("lodash", options);
+
+		expect(calls).toHaveLength(2);
+	});
+
+	it("should not cache error responses", async () => {
+		const options: PluginOptions = {
+			cache,
+			fetchImpl: async (url) => ({ ok: false, status: 503, url, text: async () => "down" }),
+		};
+
+		await expect(resolveDependency("https://esm.sh/react@18.2.0", options)).rejects.toThrow("503");
+		expect(await readdir(cache)).toEqual([]);
+	});
+
+	it("should refetch when the cache entry is corrupt", async () => {
+		const calls: string[] = [];
+		const options: PluginOptions = { cache, fetchImpl: countingFetch(calls) };
+		const pinned = "https://esm.sh/react@18.2.0";
+
+		await resolveDependency(pinned, options);
+		const [file] = await readdir(cache);
+		await writeFile(path.join(cache, file), "not json");
+		await resolveDependency(pinned, options);
+
+		expect(calls).toHaveLength(2);
 	});
 });
