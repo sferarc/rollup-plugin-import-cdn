@@ -115,7 +115,11 @@ export async function loadHook(key: string, options: PluginOptions) {
 	let position = 0;
 
 	return imports
-		.map(({ s, e }) => {
+		.map(({ s, e, d }) => {
+			// The lexer reports `import.meta` as a record with d === -2 whose span is the
+			// `import.meta` expression itself, not a specifier.
+			if (d === -2) return undefined;
+
 			const string = dependency.main.slice(s, e);
 
 			const variable = dependency.main.slice(s - 1, e + 1);
