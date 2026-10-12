@@ -38,10 +38,17 @@ export async function resolveDependency(
 	if (urls.length === 0) return null;
 
 	const { fetchImpl } = options;
+	let httpError: Error | undefined;
 
 	for (const cdnUrl of urls) {
 		try {
 			const response = await fetchImpl(cdnUrl);
+			if (!response.ok) {
+				httpError = new Error(
+					`[rollup-plugin-import-cdn] Failed to fetch ${name} from ${cdnUrl}: HTTP ${response.status ?? "error"}`,
+				);
+				continue;
+			}
 			const main = await response.text();
 
 			return { name, url: response.url, main };
@@ -49,6 +56,8 @@ export async function resolveDependency(
 			console.debug(`Error fetching ${name}`, error);
 		}
 	}
+
+	if (httpError) throw httpError;
 
 	console.warn(`[rollup-plugin-import-cdn] Could not resolve dependency ${name}`);
 

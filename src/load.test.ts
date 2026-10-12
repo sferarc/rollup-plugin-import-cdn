@@ -118,6 +118,30 @@ describe("resolveDependency", () => {
 		});
 	});
 
+	it("should throw naming the URL and status when the CDN responds with an error", async () => {
+		const options: PluginOptions = {
+			fetchImpl: async (url) => ({ ok: false, status: 404, url, text: async () => "Not Found" }),
+		};
+
+		await expect(resolveDependency("missing", options)).rejects.toThrow(
+			"Failed to fetch missing from https://cdn.skypack.dev/missing: HTTP 404",
+		);
+	});
+
+	it("should fall back to the next CDN when one responds with an error", async () => {
+		const options: PluginOptions = {
+			fetchImpl: async (url) =>
+				url.startsWith("https://bad.test")
+					? { ok: false, status: 500, url, text: async () => "oops" }
+					: { ok: true, url, text: async () => "export default 1;" },
+			priority: [(key) => `https://bad.test/${key}`, (key) => `https://good.test/${key}`],
+		};
+
+		const result = await resolveDependency("pkg", options);
+
+		expect(result?.url).toBe("https://good.test/pkg");
+	});
+
 	it("should return null when all CDNs fail", async () => {
 		const consoleSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
 		const options: PluginOptions = {
