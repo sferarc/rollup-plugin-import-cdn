@@ -239,6 +239,22 @@ export const combined = a + b;`;
 
 		expect(result).toContain("https://cdn.skypack.dev/deep/parent/module.js");
 	});
+
+	it("should leave import.meta untouched while rewriting imports", async () => {
+		const mockContent =
+			'import { a } from "./a.js";\nexport const here = new URL("./b.js", import.meta.url).href;';
+		const options: PluginOptions = {
+			fetchImpl: createMockFetch({
+				"https://cdn.skypack.dev/meta": mockContent,
+			}),
+		};
+
+		const result = await loadHook("meta", options);
+
+		expect(result).toBe(
+			'import { a } from "https://cdn.skypack.dev/a.js";\nexport const here = new URL("./b.js", import.meta.url).href;',
+		);
+	});
 });
 
 describe("resolveDependency cache", () => {
