@@ -5,6 +5,7 @@ export type FetchImpl = (
 	init?: { body?: string; headers?: Record<string, string>; method?: string },
 ) => Promise<{
 	ok: boolean;
+	status?: number;
 	text(): Promise<string>;
 	url: string;
 }>;
