@@ -11,6 +11,8 @@ import type { AvailableCDNs, Dependency, PluginOptions } from "./types";
 
 const isUrl = (value: string) => /^(http(s){0,1}:){0,1}\/\//.test(value);
 
+const isRelativeOrRootPath = (value: string) => /^\.{0,2}\//.test(value) && !isUrl(value);
+
 const parseCDN: Record<AvailableCDNs, (key: string, version?: string) => string> = {
 	skypack: (key, version) => {
 		const versionTag = version ? `@${version}` : "";
@@ -110,39 +112,29 @@ export async function loadHook(key: string, options: PluginOptions) {
 
 	await init();
 
-	const [imports] = parse(dependency.main);
+	const { main } = dependency;
+	const [imports] = parse(main);
 
-	let position = 0;
+	const parts: string[] = [];
+	let last = 0;
 
-	return imports
-		.map(({ s, e, d }) => {
-			// The lexer reports `import.meta` as a record with d === -2 whose span is the
-			// `import.meta` expression itself, not a specifier.
-			if (d === -2) return undefined;
+	for (const { s, e, d } of imports) {
+		// The lexer reports `import.meta` as a record with d === -2 whose span is the
+		// `import.meta` expression itself, not a specifier.
+		if (d === -2) continue;
 
-			// Dynamic imports (d > -1) are left alone. Their span is the whole argument,
-			// quotes included, so rewriting it would put the quotes inside the URL.
-			if (d > -1) return undefined;
+		// Dynamic imports (d > -1) are left alone. Their span is the whole argument,
+		// quotes included, so rewriting it would put the quotes inside the URL.
+		if (d > -1) continue;
 
-			const string = dependency.main.slice(s, e);
+		const specifier = main.slice(s, e);
+		if (!isRelativeOrRootPath(specifier)) continue;
 
-			return !isUrl(string) ? { string, start: s, end: e } : undefined;
-		})
-		.reduce((code, data) => {
-			if (!data) return code;
+		parts.push(main.slice(last, s), url.resolve(dependency.url, specifier));
+		last = e;
+	}
 
-			const resolvedUrl = url.resolve(dependency.url, data.string);
+	parts.push(main.slice(last));
 
-			const s = data.start + position;
-			const e = data.end + position;
-			const str = resolvedUrl.split("");
-			const before = code.slice(0, s);
-			const middle = code.slice(s, e);
-			const after = code.slice(e);
-			const lMiddle = middle.length;
-			const lStr = str.length;
-			position += lStr - lMiddle;
-			return [...before, ...str, ...after];
-		}, dependency.main.split(""))
-		.join("");
+	return parts.join("");
 }
