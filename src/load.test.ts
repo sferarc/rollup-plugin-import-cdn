@@ -269,6 +269,73 @@ export const combined = a + b;`;
 
 		expect(result).toBe(`import { a } from "https://cdn.skypack.dev/a.js";\n${dynamicImports}`);
 	});
+
+	it("should leave bare specifiers for resolveId", async () => {
+		const mockContent =
+			'import React from "react";\nimport { a } from "./a.js";\nexport { React, a };';
+		const options: PluginOptions = {
+			fetchImpl: createMockFetch({
+				"https://cdn.skypack.dev/bare": mockContent,
+			}),
+		};
+
+		const result = await loadHook("bare", options);
+
+		expect(result).toBe(
+			'import React from "react";\nimport { a } from "https://cdn.skypack.dev/a.js";\nexport { React, a };',
+		);
+	});
+
+	it("should resolve relative and root-absolute specifiers against the response URL", async () => {
+		const mockContent = 'import "./a.js";\nimport "../b.js";\nimport "/-/c.js";';
+		const options: PluginOptions = {
+			fetchImpl: async (url) => ({
+				ok: true,
+				url: "https://cdn.example/-/pkg@1.0.0/dist/index.js",
+				text: async () => (url === "https://cdn.skypack.dev/paths" ? mockContent : ""),
+			}),
+		};
+
+		const result = await loadHook("paths", options);
+
+		expect(result).toBe(
+			'import "https://cdn.example/-/pkg@1.0.0/dist/a.js";\nimport "https://cdn.example/-/pkg@1.0.0/b.js";\nimport "https://cdn.example/-/c.js";',
+		);
+	});
+
+	it("should keep offsets intact around non-ASCII text", async () => {
+		const mockContent =
+			'const s = "héllo 🎉 日本";\nimport { a } from "./a.js";\nconst t = "ünï 🚀";\nimport { b } from "./b.js";\nexport const u = "ß 🌍";';
+		const options: PluginOptions = {
+			fetchImpl: createMockFetch({
+				"https://cdn.skypack.dev/unicode": mockContent,
+			}),
+		};
+
+		const result = await loadHook("unicode", options);
+
+		expect(result).toBe(
+			'const s = "héllo 🎉 日本";\nimport { a } from "https://cdn.skypack.dev/a.js";\nconst t = "ünï 🚀";\nimport { b } from "https://cdn.skypack.dev/b.js";\nexport const u = "ß 🌍";',
+		);
+	});
+
+	it("should rewrite a large module with many imports in linear time", async () => {
+		const imports = Array.from({ length: 2000 }, (_, i) => `import "./m${i}.js";`).join("\n");
+		const padding = `/* ${"x".repeat(2 * 1024 * 1024)} */`;
+		const options: PluginOptions = {
+			fetchImpl: createMockFetch({
+				"https://cdn.skypack.dev/large": `${imports}\n${padding}`,
+			}),
+		};
+
+		const start = performance.now();
+		const result = await loadHook("large", options);
+		const elapsed = performance.now() - start;
+
+		expect(result).toContain('import "https://cdn.skypack.dev/m1999.js";');
+		expect(result).not.toContain('"./m');
+		expect(elapsed).toBeLessThan(500);
+	});
 });
 
 describe("resolveDependency cache", () => {
