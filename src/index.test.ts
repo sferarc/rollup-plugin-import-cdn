@@ -167,4 +167,53 @@ describe("importCdn", () => {
 			expect(result).toBe("react");
 		});
 	});
+	describe("fetch memoization", () => {
+		it("fetches a module once for resolveId followed by load", async () => {
+			const fetchImpl = vi.fn(
+				createMockFetch({ "https://cdn.skypack.dev/memo": "export const memo = 1;" }),
+			);
+			const plugin = importCdn({ fetchImpl });
+			const resolveId = plugin.resolveId as (id: string) => Promise<string | undefined>;
+			const load = plugin.load as (id: string) => Promise<string | undefined>;
+
+			expect(await resolveId("memo")).toBe("memo");
+			expect(await load("memo")).toBe("export const memo = 1;");
+			expect(fetchImpl).toHaveBeenCalledTimes(1);
+		});
+
+		it("refetches after buildStart", async () => {
+			const fetchImpl = vi.fn(
+				createMockFetch({ "https://cdn.skypack.dev/memo": "export const memo = 1;" }),
+			);
+			const plugin = importCdn({ fetchImpl });
+			const buildStart = plugin.buildStart as () => void;
+			const resolveId = plugin.resolveId as (id: string) => Promise<string | undefined>;
+			const load = plugin.load as (id: string) => Promise<string | undefined>;
+
+			buildStart();
+			await resolveId("memo");
+			await load("memo");
+			buildStart();
+			await resolveId("memo");
+			await load("memo");
+
+			expect(fetchImpl).toHaveBeenCalledTimes(2);
+		});
+	});
+
+	describe("foreign ids", () => {
+		it.each(["\0virtual", "node:fs", "fs", "C:\\a\\b.js"])(
+			"skips %s without fetching",
+			async (id) => {
+				const fetchImpl = vi.fn(createMockFetch({}));
+				const plugin = importCdn({ fetchImpl });
+				const resolveId = plugin.resolveId as (id: string) => Promise<string | undefined>;
+				const load = plugin.load as (id: string) => Promise<string | undefined>;
+
+				expect(await resolveId(id)).toBeUndefined();
+				expect(await load(id)).toBeUndefined();
+				expect(fetchImpl).not.toHaveBeenCalled();
+			},
+		);
+	});
 });
