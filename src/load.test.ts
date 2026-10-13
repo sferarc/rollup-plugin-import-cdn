@@ -255,6 +255,20 @@ export const combined = a + b;`;
 			'import { a } from "https://cdn.skypack.dev/a.js";\nexport const here = new URL("./b.js", import.meta.url).href;',
 		);
 	});
+
+	it("should leave dynamic imports untouched while rewriting imports", async () => {
+		const dynamicImports =
+			'export const b = import("./b.js");\nexport const c = import( "./c.js" );\nexport const d = import("./d.js", { with: { type: "json" } });';
+		const options: PluginOptions = {
+			fetchImpl: createMockFetch({
+				"https://cdn.skypack.dev/dynamic": `import { a } from "./a.js";\n${dynamicImports}`,
+			}),
+		};
+
+		const result = await loadHook("dynamic", options);
+
+		expect(result).toBe(`import { a } from "https://cdn.skypack.dev/a.js";\n${dynamicImports}`);
+	});
 });
 
 describe("resolveDependency cache", () => {

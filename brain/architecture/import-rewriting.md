@@ -6,7 +6,7 @@
 
 1. `await init()` and `parse(source)` from `es-module-lexer/minimal`. The minimal entry keeps the v2 record shape with `s` and `e` specifier offsets; see [[decisions/2026-09-14-es-module-lexer-minimal]].
 2. Records with `d === -2` are `import.meta`, whose span is the expression rather than a specifier, and are skipped. Before this check `import.meta.url` was rewritten to `https://cdn.skypack.dev/import.meta.url` (`src/load.test.ts`, "should leave import.meta untouched").
-3. For each remaining import record, slice `source[s:e]`. If the characters around it are `(` and `)`, it is a dynamic `import()` and is left alone. A specifier that is already a URL is left alone too.
+3. Records with `d > -1` are dynamic `import()` and are left alone: their span is the whole argument, quotes included. The check used to be whether the characters around the span were `(` and `)`, which missed `import( "./x.js" )` and `import("./x.js", { with: ... })` and rewrote them to `import(https://cdn.skypack.dev/%22./x.js%22 ...)`, which is not valid JavaScript (`src/load.test.ts`, "should leave dynamic imports untouched"). For each static import record, slice `source[s:e]`; a specifier that is already a URL is left alone too.
 4. Every other specifier is replaced with `url.resolve(response.url, specifier)` from `node:url`, so relative and root-relative paths (Skypack's `/-/pkg@ver/...` form) resolve against the URL the module was actually served from.
 5. Replacements are applied in order over a character array, with a running offset because each replacement changes the length.
 
