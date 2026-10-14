@@ -201,6 +201,90 @@ describe("importCdn", () => {
 		});
 	});
 
+	describe("importer-relative specifiers", () => {
+		type ResolveId = (id: string, importer?: string) => Promise<string | undefined>;
+
+		it("resolves a relative dynamic import against the CDN module's URL", async () => {
+			const fetchImpl = vi.fn(
+				createMockFetch({
+					"https://cdn.test/pkg/index.js": 'export const load = () => import("./chunk.js");',
+					"https://cdn.test/pkg/chunk.js": "export const chunk = 1;",
+				}),
+			);
+			const plugin = importCdn({ fetchImpl, priority: [() => "https://cdn.test/pkg/index.js"] });
+			const resolveId = plugin.resolveId as ResolveId;
+			const load = plugin.load as (id: string) => Promise<string | undefined>;
+
+			expect(await resolveId("pkg")).toBe("pkg");
+			expect(await load("pkg")).toContain('import("./chunk.js")');
+			expect(await resolveId("./chunk.js", "pkg")).toBe("https://cdn.test/pkg/chunk.js");
+			expect(await load("https://cdn.test/pkg/chunk.js")).toBe("export const chunk = 1;");
+		});
+
+		it("resolves a root-relative import against the CDN origin", async () => {
+			const plugin = importCdn({
+				fetchImpl: createMockFetch({
+					"https://cdn.test/pkg/index.js": 'export const load = () => import("/-/dep@1.0.0/x.js");',
+					"https://cdn.test/-/dep@1.0.0/x.js": "export const x = 1;",
+				}),
+				priority: [() => "https://cdn.test/pkg/index.js"],
+			});
+			const resolveId = plugin.resolveId as ResolveId;
+
+			await resolveId("pkg");
+			expect(await resolveId("/-/dep@1.0.0/x.js", "pkg")).toBe("https://cdn.test/-/dep@1.0.0/x.js");
+		});
+
+		it("resolves against the redirected URL, not the requested one", async () => {
+			const plugin = importCdn({
+				fetchImpl: async (url) => ({
+					ok: true,
+					url: url === "https://cdn.test/pkg" ? "https://cdn.test/pkg@1.0.0/index.js" : url,
+					text: async () => "export {};",
+				}),
+				priority: [() => "https://cdn.test/pkg"],
+			});
+			const resolveId = plugin.resolveId as ResolveId;
+
+			await resolveId("pkg");
+			expect(await resolveId("./chunk.js", "pkg")).toBe("https://cdn.test/pkg@1.0.0/chunk.js");
+		});
+
+		it("resolves against an importer that is itself a URL", async () => {
+			const plugin = importCdn({
+				fetchImpl: createMockFetch({ "https://cdn.test/a/b.js": "export {};" }),
+			});
+			const resolveId = plugin.resolveId as ResolveId;
+
+			expect(await resolveId("../b.js", "https://cdn.test/a/c/d.js")).toBe(
+				"https://cdn.test/a/b.js",
+			);
+		});
+
+		it("leaves relative imports from local files to Rollup", async () => {
+			const fetchImpl = vi.fn(createMockFetch({}));
+			const plugin = importCdn({ fetchImpl });
+			const resolveId = plugin.resolveId as ResolveId;
+
+			expect(await resolveId("./chunk.js", "/abs/src/main.js")).toBeUndefined();
+			expect(await resolveId("/abs/src/other.js", "/abs/src/main.js")).toBeUndefined();
+			expect(await resolveId("../x.js", "C:\\abs\\main.js")).toBeUndefined();
+			expect(fetchImpl).not.toHaveBeenCalled();
+		});
+
+		it("forgets importer URLs after buildStart", async () => {
+			const fetchImpl = vi.fn(createMockFetch({ "https://cdn.test/pkg/index.js": "export {};" }));
+			const plugin = importCdn({ fetchImpl, priority: [() => "https://cdn.test/pkg/index.js"] });
+			const buildStart = plugin.buildStart as () => void;
+			const resolveId = plugin.resolveId as ResolveId;
+
+			await resolveId("pkg");
+			buildStart();
+			expect(await resolveId("./chunk.js", "pkg")).toBeUndefined();
+			expect(fetchImpl).toHaveBeenCalledTimes(1);
+		});
+	});
+
 	describe("foreign ids", () => {
 		it.each(["\0virtual", "node:fs", "fs", "C:\\a\\b.js"])(
 			"skips %s without fetching",
