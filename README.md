@@ -48,6 +48,8 @@ importCdn({
 });
 ```
 
+A version set for a package also applies to its subpaths, and goes after the package name: with `versions: { "react-dom": "18.2.0" }`, `import "react-dom/client"` fetches `https://cdn.skypack.dev/react-dom@18.2.0/client`. Scoped packages work the same way, so `@scope/pkg/sub` with `"@scope/pkg": "1.0.0"` fetches `https://cdn.skypack.dev/@scope/pkg@1.0.0/sub`. An entry for the full specifier, such as `"react-dom/client"`, takes precedence over the package entry.
+
 ### Fetch Cache
 
 ```js
@@ -64,11 +66,13 @@ With `cache` set, responses for URLs pinned to an exact version (`pkg@1.2.3`) ar
 ```js
 importCdn({
   priority: [
-    (pkg) => `https://esm.sh/${pkg}`,
+    (pkg, version) => `https://esm.sh/${pkg}${version ? `?version=${version}` : ""}`,
     "skypack",
   ],
 });
 ```
+
+A custom function receives the specifier as written and, as its second argument, the version from `versions` that applies to it, if any.
 
 ## Documentation
 

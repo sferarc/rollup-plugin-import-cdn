@@ -67,6 +67,41 @@ describe("resolveDependency", () => {
 		});
 	});
 
+	it.each([
+		["react-dom/client", { "react-dom": "18.2.0" }, "react-dom@18.2.0/client"],
+		["react-dom/client", { "react-dom/client": "18.2.0" }, "react-dom@18.2.0/client"],
+		[
+			"react-dom/client",
+			{ "react-dom": "18.2.0", "react-dom/client": "18.3.1" },
+			"react-dom@18.3.1/client",
+		],
+		["@scope/pkg", { "@scope/pkg": "1.0.0" }, "@scope/pkg@1.0.0"],
+		["@scope/pkg/sub", { "@scope/pkg": "1.0.0" }, "@scope/pkg@1.0.0/sub"],
+		["@scope/pkg/sub/deep.js", { "@scope/pkg": "1.0.0" }, "@scope/pkg@1.0.0/sub/deep.js"],
+		["react-dom/client", { react: "18.2.0" }, "react-dom/client"],
+		["react-dom@18/client", { "react-dom": "18.2.0" }, "react-dom@18/client"],
+	])("should place the version for %s after the package name (%j)", async (key, versions, path) => {
+		const options: PluginOptions = {
+			fetchImpl: createMockFetch({ [`https://cdn.skypack.dev/${path}`]: "export {};" }),
+			versions,
+		};
+
+		expect((await resolveDependency(key, options))?.url).toBe(`https://cdn.skypack.dev/${path}`);
+	});
+
+	it("should pass the pinned version to a custom CDN resolver", async () => {
+		const priority = vi.fn((key: string, version?: string) => `https://esm.sh/${key}?v=${version}`);
+		const options: PluginOptions = {
+			fetchImpl: createMockFetch({ "https://esm.sh/react-dom/client?v=18.2.0": "export {};" }),
+			priority: [priority],
+			versions: { "react-dom": "18.2.0" },
+		};
+
+		await resolveDependency("react-dom/client", options);
+
+		expect(priority).toHaveBeenCalledWith("react-dom/client", "18.2.0");
+	});
+
 	it("should resolve direct URL imports", async () => {
 		const mockContent = 'export const foo = "bar";';
 		const directUrl = "https://example.com/module.js";
@@ -370,6 +405,20 @@ describe("resolveDependency cache", () => {
 		expect(calls).toEqual(["https://cdn.skypack.dev/lodash@4.17.21"]);
 		expect(second).toEqual(first);
 		expect(second?.url).toBe("https://cdn.skypack.dev/lodash@4.17.21/resolved.js");
+	});
+
+	it("should cache a subpath pinned through its package name", async () => {
+		const calls: string[] = [];
+		const options: PluginOptions = {
+			cache,
+			fetchImpl: countingFetch(calls),
+			versions: { "react-dom": "18.2.0" },
+		};
+
+		await resolveDependency("react-dom/client", options);
+		await resolveDependency("react-dom/client", options);
+
+		expect(calls).toEqual(["https://cdn.skypack.dev/react-dom@18.2.0/client"]);
 	});
 
 	it("should share the cache between plugin instances", async () => {
