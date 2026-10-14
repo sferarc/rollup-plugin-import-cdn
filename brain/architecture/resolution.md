@@ -12,9 +12,15 @@ The plugin keeps a map from each id it resolved to the `response.url` its source
 
 1. A specifier starting with `/`, `.` or `file://` is local: no URLs, so the plugin leaves it to Rollup.
 2. A specifier matching `^(http(s)?:)?//` is a URL and is fetched as is. Protocol-relative `//host/...` counts.
-3. Anything else is a package name. Each entry of `priority` (default `["skypack"]`) yields one URL: `"skypack"` gives `https://cdn.skypack.dev/<key>` plus `@<version>` when `versions[key]` is set, and a function gives `fn(key)`.
+3. Anything else is a package name. Each entry of `priority` (default `["skypack"]`) yields one URL: `"skypack"` gives `https://cdn.skypack.dev/<key>`, and a function gives `fn(key, version)`.
 
-Outside the importer case above, a path without a leading `./` is treated as a package name. `versions` is looked up by the exact specifier, so a pin on `react` does not apply to `react/jsx-runtime`. A custom CDN function receives only the key, never the pinned version (`src/load.ts`).
+Outside the importer case above, a path without a leading `./` is treated as a package name.
+
+## Version pinning
+
+`splitSpecifier` in `src/load.ts` splits a bare specifier into the package name (`pkg` or `@scope/pkg`) and the rest. `pinnedVersion` looks up `versions` by the exact specifier first, then by the package name, so a pin on `react-dom` applies to `react-dom/client`. A specifier that carries its own version (`react-dom@18/client`) only takes an exact-specifier pin. The skypack builder puts the version after the package name, `https://cdn.skypack.dev/react-dom@18.2.0/client`, and leaves a specifier with its own version unchanged. Custom CDN functions get the same version as their second argument and build the URL themselves (`src/load.test.ts`, "should place the version for %s after the package name", "should pass the pinned version to a custom CDN resolver").
+
+These URLs end the version with `/` or the string end, so `isPinnedUrl` matches them and the `cache` option applies ("should cache a subpath pinned through its package name").
 
 ## Fallback
 

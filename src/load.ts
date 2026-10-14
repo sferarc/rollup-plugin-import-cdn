@@ -13,12 +13,29 @@ const isUrl = (value: string) => /^(http(s){0,1}:){0,1}\/\//.test(value);
 
 const isRelativeOrRootPath = (value: string) => /^\.{0,2}\//.test(value) && !isUrl(value);
 
-const parseCDN: Record<AvailableCDNs, (key: string, version?: string) => string> = {
-	skypack: (key, version) => {
-		const versionTag = version ? `@${version}` : "";
-		return `https://cdn.skypack.dev/${key}${versionTag}`;
-	},
+// `name` is `pkg` or `@scope/pkg`; `subpath` is the rest, starting with `/` or, when the
+// specifier carries its own version, with `@`.
+function splitSpecifier(key: string): { name: string; subpath: string } {
+	const match = /^(@[^/]+\/[^/@]+|[^/@]+)(.*)$/.exec(key);
+	return match ? { name: match[1], subpath: match[2] } : { name: key, subpath: "" };
+}
+
+const withVersion = (key: string, version?: string) => {
+	const { name, subpath } = splitSpecifier(key);
+	if (!version || subpath.startsWith("@")) return key;
+	return `${name}@${version}${subpath}`;
 };
+
+const parseCDN: Record<AvailableCDNs, (key: string, version?: string) => string> = {
+	skypack: (key, version) => `https://cdn.skypack.dev/${withVersion(key, version)}`,
+};
+
+function pinnedVersion(key: string, versions: PluginOptions["versions"]) {
+	const exact = versions?.[key];
+	if (exact) return exact;
+	const { name, subpath } = splitSpecifier(key);
+	return subpath.startsWith("@") ? undefined : versions?.[name];
+}
 
 const isPinnedUrl = (value: string) => /@\d+\.\d+\.\d+(?:[-+][\w.-]+)?(?=[/?#]|$)/.test(value);
 
@@ -55,13 +72,11 @@ function resolveDependencyUrls(key: string, options: PluginOptions): string[] {
 	if (isUrl(key)) return [key];
 
 	const priorities = options.priority ?? ["skypack"];
-	const version = options.versions?.[key];
+	const version = pinnedVersion(key, options.versions);
 
-	return priorities.map((cdn) => {
-		if (typeof cdn === "string") return parseCDN[cdn](key, version);
-
-		return cdn(key);
-	});
+	return priorities.map((cdn) =>
+		typeof cdn === "string" ? parseCDN[cdn](key, version) : cdn(key, version),
+	);
 }
 
 export async function resolveDependency(
