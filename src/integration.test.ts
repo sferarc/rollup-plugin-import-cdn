@@ -1,3 +1,4 @@
+import { rollup } from "rollup";
 import { describe, expect, it, vi } from "vitest";
 import { importCdn } from "./index";
 import type { FetchImpl } from "./types";
@@ -286,5 +287,28 @@ describe("Integration: Error handling", () => {
 
 		// Module with no imports should return unchanged
 		expect(result).toBe("export const value = 42;");
+	});
+});
+
+describe("Integration: Rollup build", () => {
+	it("bundles a dynamic import relative to a CDN module", async () => {
+		const bundle = await rollup({
+			input: "pkg",
+			plugins: [
+				importCdn({
+					fetchImpl: createMockCdn({
+						"https://cdn.test/pkg/index.js": 'export const load = () => import("./chunk.js");',
+						"https://cdn.test/pkg/chunk.js": "export const chunk = 1;",
+					}),
+					priority: [() => "https://cdn.test/pkg/index.js"],
+				}),
+			],
+		});
+		const { output } = await bundle.generate({ format: "es" });
+		await bundle.close();
+
+		expect(output.map((chunk) => chunk.type === "chunk" && chunk.code).join("\n")).toContain(
+			"const chunk = 1;",
+		);
 	});
 });

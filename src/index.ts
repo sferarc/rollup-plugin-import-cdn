@@ -16,6 +16,11 @@ const isForeignId = (id: string) =>
 	path.posix.isAbsolute(id) ||
 	path.win32.isAbsolute(id);
 
+const isHttpUrl = (id: string) => /^https?:\/\//.test(id);
+
+const isRelativeToImporter = (key: string) =>
+	/^\.{1,2}\//.test(key) || (key.startsWith("/") && !key.startsWith("//"));
+
 export function importCdn(pluginOptions: PartialBy<PluginOptions, "fetchImpl"> = {}): RollupPlugin {
 	const globalFetch = typeof fetch !== "undefined" ? fetch : undefined;
 	const baseFetch = pluginOptions.fetchImpl ?? globalFetch;
@@ -41,17 +46,34 @@ export function importCdn(pluginOptions: PartialBy<PluginOptions, "fetchImpl"> =
 		return { ...response, text: async () => body };
 	};
 
+	// Module id to the URL its source was served from, after redirects.
+	const moduleUrls = new Map<string, string>();
+
 	const options = { ...pluginOptions, fetchImpl };
 
 	return {
 		name: "plugin-import-cdn",
 		buildStart() {
 			responses.clear();
+			moduleUrls.clear();
 		},
-		async resolveId(key: string) {
-			if (isForeignId(key)) return;
+		async resolveId(key: string, importer?: string) {
+			const importerUrl =
+				importer === undefined
+					? undefined
+					: (moduleUrls.get(importer) ?? (isHttpUrl(importer) ? importer : undefined));
+
+			// loadHook leaves dynamic imports as written, so they arrive relative to a CDN module.
+			if (importerUrl && isRelativeToImporter(key)) {
+				key = new URL(key, importerUrl).href;
+			} else if (isForeignId(key)) {
+				return;
+			}
+
 			const dependency = await resolveDependency(key, options);
-			return dependency?.name;
+			if (!dependency) return;
+			moduleUrls.set(dependency.name, dependency.url);
+			return dependency.name;
 		},
 		async load(key: string) {
 			if (isForeignId(key)) return;
