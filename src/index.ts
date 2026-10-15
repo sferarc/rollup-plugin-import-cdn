@@ -3,7 +3,6 @@ import path from "node:path";
 import type { Plugin as RollupPlugin } from "rollup";
 import { isRelativeReference, loadHook, resolveDependency } from "./load";
 import type { FetchImpl, PluginOptions } from "./types";
-import type { PartialBy } from "./utils";
 
 type FetchedResponse = Omit<Awaited<ReturnType<FetchImpl>>, "text"> & { body: string };
 
@@ -18,7 +17,9 @@ const isForeignId = (id: string) =>
 
 const isHttpUrl = (id: string) => /^https?:\/\//.test(id);
 
-export function importCdn(pluginOptions: PartialBy<PluginOptions, "fetchImpl"> = {}): RollupPlugin {
+export function importCdn(
+	pluginOptions: Omit<PluginOptions, "fetchImpl"> & Partial<Pick<PluginOptions, "fetchImpl">> = {},
+): RollupPlugin {
 	const globalFetch = typeof fetch !== "undefined" ? fetch : undefined;
 	const baseFetch = pluginOptions.fetchImpl ?? globalFetch;
 	if (!baseFetch) {
