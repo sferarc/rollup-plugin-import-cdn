@@ -1,4 +1,5 @@
-import { mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { mkdir, mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -482,5 +483,99 @@ describe("resolveDependency cache", () => {
 		await resolveDependency(pinned, options);
 
 		expect(calls).toHaveLength(2);
+	});
+
+	it.each([
+		"pkg@1.2.3",
+		"@scope/pkg@1.2.3/sub.js",
+		"pkg@1.2.3-beta.1",
+		"pkg@1.2.3+build",
+		"pkg@1.2.3?dev",
+	])("should cache the pinned URL %s", async (specifier) => {
+		const calls: string[] = [];
+		const options: PluginOptions = { cache, fetchImpl: countingFetch(calls) };
+
+		await resolveDependency(`https://cdn.example/${specifier}`, options);
+		await resolveDependency(`https://cdn.example/${specifier}`, options);
+
+		expect(calls).toHaveLength(1);
+	});
+
+	it.each([
+		"pkg@1",
+		"pkg@1.2",
+		"pkg@^1.2.3",
+		"pkg@~1.2.3",
+		"pkg@latest",
+		"pkg@1.2.3.4",
+		"pkg@1.2.3x",
+		"pkg",
+		"pkg@latest?alias=dep@1.2.3",
+		"pkg#@1.2.3",
+	])("should not cache the unpinned URL %s", async (specifier) => {
+		const calls: string[] = [];
+		const options: PluginOptions = { cache, fetchImpl: countingFetch(calls) };
+
+		await resolveDependency(`https://cdn.example/${specifier}`, options);
+		await resolveDependency(`https://cdn.example/${specifier}`, options);
+
+		expect(calls).toHaveLength(2);
+		expect(await readdir(cache)).toEqual([]);
+	});
+
+	it.each([
+		["a non-http url", { url: "file:///etc/passwd", main: "export default 1;" }],
+		["a relative url", { url: "/react.js", main: "export default 1;" }],
+		["a missing url", { main: "export default 1;" }],
+		["a missing main", { url: "https://esm.sh/react@18.2.0" }],
+		["a non-string main", { url: "https://esm.sh/react@18.2.0", main: 1 }],
+		["null", null],
+	])("should refetch when the cache entry has %s", async (_, entry) => {
+		const calls: string[] = [];
+		const options: PluginOptions = { cache, fetchImpl: countingFetch(calls) };
+		const pinned = "https://esm.sh/react@18.2.0";
+
+		await resolveDependency(pinned, options);
+		const [file] = await readdir(cache);
+		await writeFile(path.join(cache, file), JSON.stringify(entry));
+		const dependency = await resolveDependency(pinned, options);
+
+		expect(calls).toHaveLength(2);
+		expect(dependency?.url).toBe(`${pinned}/resolved.js`);
+	});
+
+	it("should leave one valid entry when concurrent resolves write the same URL", async () => {
+		const debug = vi.spyOn(console, "debug").mockImplementation(() => {});
+		const calls: string[] = [];
+		const options: PluginOptions = { cache, fetchImpl: countingFetch(calls) };
+		const pinned = "https://esm.sh/react@18.2.0";
+
+		const results = await Promise.all(
+			Array.from({ length: 8 }, () => resolveDependency(pinned, { ...options })),
+		);
+
+		expect(results.every((result) => result?.url === `${pinned}/resolved.js`)).toBe(true);
+		expect(debug).not.toHaveBeenCalled();
+		const files = await readdir(cache);
+		expect(files).toHaveLength(1);
+		expect(files[0]).toMatch(/^[0-9a-f]{64}\.json$/);
+		const second = await resolveDependency(pinned, options);
+		expect(second?.main).toBe(`export default "${pinned}";`);
+		expect(calls).toHaveLength(8);
+		debug.mockRestore();
+	});
+
+	it("should remove the temporary file when a cache write fails", async () => {
+		const debug = vi.spyOn(console, "debug").mockImplementation(() => {});
+		const pinned = "https://esm.sh/react@18.2.0";
+		const entry = `${createHash("sha256").update(pinned).digest("hex")}.json`;
+		await mkdir(path.join(cache, entry, "blocker"), { recursive: true });
+
+		const dependency = await resolveDependency(pinned, { cache, fetchImpl: countingFetch([]) });
+
+		expect(dependency?.url).toBe(`${pinned}/resolved.js`);
+		expect(debug).toHaveBeenCalledOnce();
+		expect(await readdir(cache)).toEqual([entry]);
+		debug.mockRestore();
 	});
 });

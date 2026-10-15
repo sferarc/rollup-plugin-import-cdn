@@ -1,5 +1,5 @@
-import { createHash } from "node:crypto";
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { createHash, randomUUID } from "node:crypto";
+import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import url from "node:url";
 // The minimal build keeps the v2 import record shape (`s`/`e` specifier offsets) that the
@@ -37,7 +37,14 @@ function pinnedVersion(key: string, versions: PluginOptions["versions"]) {
 	return subpath.startsWith("@") ? undefined : versions?.[name];
 }
 
-const isPinnedUrl = (value: string) => /@\d+\.\d+\.\d+(?:[-+][\w.-]+)?(?=[/?#]|$)/.test(value);
+// Only the path names the package version; a query or fragment can carry any text.
+function isPinnedUrl(value: string) {
+	if (!URL.canParse(value)) return false;
+	return /@\d+\.\d+\.\d+(?:[-+][\w.-]+)?(?=\/|$)/.test(new URL(value).pathname);
+}
+
+const isHttpUrl = (value: unknown) =>
+	typeof value === "string" && URL.canParse(value) && /^https?:$/.test(new URL(value).protocol);
 
 const cacheFile = (dir: string, cdnUrl: string) =>
 	path.join(dir, `${createHash("sha256").update(cdnUrl).digest("hex")}.json`);
@@ -48,20 +55,21 @@ async function readCache(
 ): Promise<Pick<Dependency, "url" | "main"> | null> {
 	try {
 		const entry = JSON.parse(await readFile(cacheFile(dir, cdnUrl), "utf8"));
-		return typeof entry.url === "string" && typeof entry.main === "string" ? entry : null;
+		return isHttpUrl(entry?.url) && typeof entry.main === "string" ? entry : null;
 	} catch {
 		return null;
 	}
 }
 
 async function writeCache(dir: string, cdnUrl: string, entry: Pick<Dependency, "url" | "main">) {
+	const file = cacheFile(dir, cdnUrl);
+	const temporary = `${file}.${process.pid}.${randomUUID()}.tmp`;
 	try {
-		const file = cacheFile(dir, cdnUrl);
-		const temporary = `${file}.${process.pid}.tmp`;
 		await mkdir(dir, { recursive: true });
 		await writeFile(temporary, JSON.stringify(entry));
 		await rename(temporary, file);
 	} catch (error) {
+		await rm(temporary, { force: true }).catch(() => {});
 		console.debug(`Error writing cache for ${cdnUrl}`, error);
 	}
 }
