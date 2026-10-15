@@ -580,7 +580,7 @@ describe("resolveDependency cache", () => {
 
 		await resolveDependency(pinned, options);
 		const [file] = await readdir(cache);
-		await writeFile(path.join(cache, file), "not json");
+		await writeFile(path.join(cache, file!), "not json");
 		await resolveDependency(pinned, options);
 
 		expect(calls).toHaveLength(2);
@@ -638,7 +638,7 @@ describe("resolveDependency cache", () => {
 
 		await resolveDependency(pinned, options);
 		const [file] = await readdir(cache);
-		await writeFile(path.join(cache, file), JSON.stringify(entry));
+		await writeFile(path.join(cache, file!), JSON.stringify(entry));
 		const dependency = await resolveDependency(pinned, options);
 
 		expect(calls).toHaveLength(2);
