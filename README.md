@@ -37,6 +37,15 @@ import { debounce } from "lodash-es";
 import confetti from "https://esm.sh/canvas-confetti";
 ```
 
+## Options
+
+| Option | Default | Description |
+| --- | --- | --- |
+| `cache` | none | Directory for an on-disk cache of responses from pinned URLs. See [Fetch Cache](#fetch-cache). |
+| `fetchImpl` | global `fetch` | Function used for every request: `(url) => Promise<{ ok, status, url, text() }>`. `importCdn` throws `A fetch implementation is required` when it is not set and no global `fetch` exists. |
+| `priority` | `["skypack"]` | CDNs to try, in order. Each entry is `"skypack"` or a function returning a URL. See [Custom CDN](#custom-cdn). |
+| `versions` | none | Versions to pin, keyed by package name or full specifier. See [Version Pinning](#version-pinning). |
+
 ### Version Pinning
 
 ```js
@@ -48,7 +57,9 @@ importCdn({
 });
 ```
 
-A version set for a package also applies to its subpaths, and goes after the package name: with `versions: { "react-dom": "18.2.0" }`, `import "react-dom/client"` fetches `https://cdn.skypack.dev/react-dom@18.2.0/client`. Scoped packages work the same way, so `@scope/pkg/sub` with `"@scope/pkg": "1.0.0"` fetches `https://cdn.skypack.dev/@scope/pkg@1.0.0/sub`. An entry for the full specifier, such as `"react-dom/client"`, takes precedence over the package entry.
+A version set for a package also applies to its subpaths, and goes after the package name: with `versions: { "react-dom": "18.2.0" }`, `import "react-dom/client"` fetches `https://cdn.skypack.dev/react-dom@18.2.0/client`. Scoped packages work the same way, so `@scope/pkg/sub` with `"@scope/pkg": "1.0.0"` fetches `https://cdn.skypack.dev/@scope/pkg@1.0.0/sub`. An entry for the full specifier, such as `"react-dom/client"`, takes precedence over the package entry. A specifier that carries its own version, such as `react@17/jsx-runtime`, ignores `versions`.
+
+Only the built-in `"skypack"` entry applies the pin to its URL. A custom `priority` function receives the version as its second argument and decides how to use it.
 
 ### Fetch Cache
 
@@ -59,7 +70,7 @@ importCdn({
 });
 ```
 
-With `cache` set, responses for URLs pinned to an exact version (`pkg@1.2.3`) are stored in that directory and reused by later builds. Unpinned URLs are always fetched.
+With `cache` set, responses for URLs pinned to an exact version (`pkg@1.2.3`) are stored in that directory and reused by later builds. Unpinned URLs are always fetched. The check is on the URL itself, so a custom `priority` function must put `@x.y.z` in the URL for its responses to be cached; a version passed as a query parameter is not enough.
 
 ### Custom CDN
 
@@ -73,6 +84,13 @@ importCdn({
 ```
 
 A custom function receives the specifier as written and, as its second argument, the version from `versions` that applies to it, if any.
+
+## Behaviour
+
+- **Fallback.** Each CDN in `priority` is tried in turn. A non-OK response or a network error moves on to the next one.
+- **Failures.** If no CDN succeeds and at least one answered with a non-OK status, the build fails with the URL and status, for example `Failed to fetch lodash-es from https://cdn.skypack.dev/lodash-es: HTTP 404`. If every attempt failed with a network error, the plugin logs a warning and leaves the import for Rollup to handle.
+- **Transitive imports.** Relative, root-relative and protocol-relative static imports inside a CDN module are rewritten to absolute URLs, resolved against the URL the module was served from. Bare imports are left as written and go back through the plugin, so `versions` and `priority` apply to transitive dependencies too.
+- **Dynamic imports.** A relative `import("./chunk.js")` inside a CDN module is resolved against the URL the module was served from, after redirects.
 
 ## Documentation
 
