@@ -1,5 +1,5 @@
-import { createHash } from "node:crypto";
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { createHash, randomUUID } from "node:crypto";
+import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import url from "node:url";
 // The minimal build keeps the v2 import record shape (`s`/`e` specifier offsets) that the
@@ -38,7 +38,14 @@ function pinnedVersion(key: string, versions: PluginOptions["versions"]) {
 	return subpath.startsWith("@") ? undefined : versions?.[name];
 }
 
-const isPinnedUrl = (value: string) => /@\d+\.\d+\.\d+(?:[-+][\w.-]+)?(?=[/?#]|$)/.test(value);
+// Only the path names the package version; a query or fragment can carry any text.
+function isPinnedUrl(value: string) {
+	if (!URL.canParse(value)) return false;
+	return /@\d+\.\d+\.\d+(?:[-+][\w.-]+)?(?=\/|$)/.test(new URL(value).pathname);
+}
+
+const isHttpUrl = (value: unknown) =>
+	typeof value === "string" && URL.canParse(value) && /^https?:$/.test(new URL(value).protocol);
 
 const cacheFile = (dir: string, cdnUrl: string) =>
 	path.join(dir, `${createHash("sha256").update(cdnUrl).digest("hex")}.json`);
@@ -49,20 +56,21 @@ async function readCache(
 ): Promise<Pick<Dependency, "url" | "main"> | null> {
 	try {
 		const entry = JSON.parse(await readFile(cacheFile(dir, cdnUrl), "utf8"));
-		return typeof entry.url === "string" && typeof entry.main === "string" ? entry : null;
+		return isHttpUrl(entry?.url) && typeof entry.main === "string" ? entry : null;
 	} catch {
 		return null;
 	}
 }
 
 async function writeCache(dir: string, cdnUrl: string, entry: Pick<Dependency, "url" | "main">) {
+	const file = cacheFile(dir, cdnUrl);
+	const temporary = `${file}.${process.pid}.${randomUUID()}.tmp`;
 	try {
-		const file = cacheFile(dir, cdnUrl);
-		const temporary = `${file}.${process.pid}.tmp`;
 		await mkdir(dir, { recursive: true });
 		await writeFile(temporary, JSON.stringify(entry));
 		await rename(temporary, file);
 	} catch (error) {
+		await rm(temporary, { force: true }).catch(() => {});
 		console.debug(`Error writing cache for ${cdnUrl}`, error);
 	}
 }
@@ -80,6 +88,22 @@ function resolveDependencyUrls(key: string, options: PluginOptions): string[] {
 	);
 }
 
+function describeError(error: unknown): string {
+	if (!(error instanceof Error)) return String(error);
+	const { cause } = error as { cause?: unknown };
+	if (cause instanceof Error && cause.message) return `${error.message} (${cause.message})`;
+	return error.message;
+}
+
+function formatAttempts(name: string, attempts: { url: string; reason: string }[]): string {
+	return attempts
+		.map(
+			({ url, reason }) =>
+				`[rollup-plugin-import-cdn] Failed to fetch ${name} from ${url}: ${reason}`,
+		)
+		.join("\n");
+}
+
 export async function resolveDependency(
 	name: string,
 	options: PluginOptions,
@@ -88,7 +112,9 @@ export async function resolveDependency(
 	if (urls.length === 0) return null;
 
 	const { fetchImpl, cache } = options;
-	let httpError: Error | undefined;
+	const attempts: { url: string; reason: string }[] = [];
+	let sawHttpError = false;
+	let lastError: unknown;
 
 	for (const cdnUrl of urls) {
 		const cacheable = cache !== undefined && isPinnedUrl(cdnUrl);
@@ -100,9 +126,8 @@ export async function resolveDependency(
 		try {
 			const response = await fetchImpl(cdnUrl);
 			if (!response.ok) {
-				httpError = new Error(
-					`[rollup-plugin-import-cdn] Failed to fetch ${name} from ${cdnUrl}: HTTP ${response.status ?? "error"}`,
-				);
+				sawHttpError = true;
+				attempts.push({ url: cdnUrl, reason: `HTTP ${response.status ?? "error"}` });
 				continue;
 			}
 			const main = await response.text();
@@ -111,13 +136,20 @@ export async function resolveDependency(
 
 			return { name, url: response.url, main };
 		} catch (error) {
-			console.debug(`Error fetching ${name}`, error);
+			lastError = error;
+			attempts.push({ url: cdnUrl, reason: describeError(error) });
 		}
 	}
 
-	if (httpError) throw httpError;
+	const detail = formatAttempts(name, attempts);
+	if (sawHttpError) {
+		const error = new Error(detail);
+		// tsconfig targets ES2020, which lacks the ErrorOptions constructor overload.
+		if (lastError !== undefined) Object.assign(error, { cause: lastError });
+		throw error;
+	}
 
-	console.warn(`[rollup-plugin-import-cdn] Could not resolve dependency ${name}`);
+	console.warn(`[rollup-plugin-import-cdn] Could not resolve dependency ${name}\n${detail}`);
 
 	return null;
 }

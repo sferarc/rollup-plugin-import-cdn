@@ -1,4 +1,5 @@
-import { mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { mkdir, mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -190,9 +191,56 @@ describe("resolveDependency", () => {
 
 		expect(result).toBeNull();
 		expect(consoleSpy).toHaveBeenCalledWith(
-			"[rollup-plugin-import-cdn] Could not resolve dependency nonexistent",
+			"[rollup-plugin-import-cdn] Could not resolve dependency nonexistent\n" +
+				"[rollup-plugin-import-cdn] Failed to fetch nonexistent from https://cdn.skypack.dev/nonexistent: Not found: https://cdn.skypack.dev/nonexistent",
 		);
 		consoleSpy.mockRestore();
+	});
+
+	it("should warn with every URL and the underlying cause when all CDNs are unreachable", async () => {
+		const consoleSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+		const options: PluginOptions = {
+			fetchImpl: async (url) => {
+				throw Object.assign(new TypeError("fetch failed"), {
+					cause: new Error(`getaddrinfo ENOTFOUND ${new URL(url).host}`),
+				});
+			},
+			priority: [(key) => `https://a.test/${key}`, (key) => `https://b.test/${key}`],
+		};
+
+		const result = await resolveDependency("pkg", options);
+
+		expect(result).toBeNull();
+		expect(consoleSpy).toHaveBeenCalledWith(
+			[
+				"[rollup-plugin-import-cdn] Could not resolve dependency pkg",
+				"[rollup-plugin-import-cdn] Failed to fetch pkg from https://a.test/pkg: fetch failed (getaddrinfo ENOTFOUND a.test)",
+				"[rollup-plugin-import-cdn] Failed to fetch pkg from https://b.test/pkg: fetch failed (getaddrinfo ENOTFOUND b.test)",
+			].join("\n"),
+		);
+		consoleSpy.mockRestore();
+	});
+
+	it("should throw listing every attempt when HTTP and network failures mix", async () => {
+		const networkError = new Error("connect ECONNREFUSED");
+		const options: PluginOptions = {
+			fetchImpl: async (url) => {
+				if (url.startsWith("https://down.test")) throw networkError;
+				return { ok: false, status: 500, url, text: async () => "oops" };
+			},
+			priority: [(key) => `https://bad.test/${key}`, (key) => `https://down.test/${key}`],
+		};
+
+		const error = await resolveDependency("pkg", options).catch((e: unknown) => e);
+
+		expect(error).toBeInstanceOf(Error);
+		expect((error as Error).message).toBe(
+			[
+				"[rollup-plugin-import-cdn] Failed to fetch pkg from https://bad.test/pkg: HTTP 500",
+				"[rollup-plugin-import-cdn] Failed to fetch pkg from https://down.test/pkg: connect ECONNREFUSED",
+			].join("\n"),
+		);
+		expect((error as { cause?: unknown }).cause).toBe(networkError);
 	});
 });
 
@@ -500,5 +548,99 @@ describe("resolveDependency cache", () => {
 		await resolveDependency(pinned, options);
 
 		expect(calls).toHaveLength(2);
+	});
+
+	it.each([
+		"pkg@1.2.3",
+		"@scope/pkg@1.2.3/sub.js",
+		"pkg@1.2.3-beta.1",
+		"pkg@1.2.3+build",
+		"pkg@1.2.3?dev",
+	])("should cache the pinned URL %s", async (specifier) => {
+		const calls: string[] = [];
+		const options: PluginOptions = { cache, fetchImpl: countingFetch(calls) };
+
+		await resolveDependency(`https://cdn.example/${specifier}`, options);
+		await resolveDependency(`https://cdn.example/${specifier}`, options);
+
+		expect(calls).toHaveLength(1);
+	});
+
+	it.each([
+		"pkg@1",
+		"pkg@1.2",
+		"pkg@^1.2.3",
+		"pkg@~1.2.3",
+		"pkg@latest",
+		"pkg@1.2.3.4",
+		"pkg@1.2.3x",
+		"pkg",
+		"pkg@latest?alias=dep@1.2.3",
+		"pkg#@1.2.3",
+	])("should not cache the unpinned URL %s", async (specifier) => {
+		const calls: string[] = [];
+		const options: PluginOptions = { cache, fetchImpl: countingFetch(calls) };
+
+		await resolveDependency(`https://cdn.example/${specifier}`, options);
+		await resolveDependency(`https://cdn.example/${specifier}`, options);
+
+		expect(calls).toHaveLength(2);
+		expect(await readdir(cache)).toEqual([]);
+	});
+
+	it.each([
+		["a non-http url", { url: "file:///etc/passwd", main: "export default 1;" }],
+		["a relative url", { url: "/react.js", main: "export default 1;" }],
+		["a missing url", { main: "export default 1;" }],
+		["a missing main", { url: "https://esm.sh/react@18.2.0" }],
+		["a non-string main", { url: "https://esm.sh/react@18.2.0", main: 1 }],
+		["null", null],
+	])("should refetch when the cache entry has %s", async (_, entry) => {
+		const calls: string[] = [];
+		const options: PluginOptions = { cache, fetchImpl: countingFetch(calls) };
+		const pinned = "https://esm.sh/react@18.2.0";
+
+		await resolveDependency(pinned, options);
+		const [file] = await readdir(cache);
+		await writeFile(path.join(cache, file), JSON.stringify(entry));
+		const dependency = await resolveDependency(pinned, options);
+
+		expect(calls).toHaveLength(2);
+		expect(dependency?.url).toBe(`${pinned}/resolved.js`);
+	});
+
+	it("should leave one valid entry when concurrent resolves write the same URL", async () => {
+		const debug = vi.spyOn(console, "debug").mockImplementation(() => {});
+		const calls: string[] = [];
+		const options: PluginOptions = { cache, fetchImpl: countingFetch(calls) };
+		const pinned = "https://esm.sh/react@18.2.0";
+
+		const results = await Promise.all(
+			Array.from({ length: 8 }, () => resolveDependency(pinned, { ...options })),
+		);
+
+		expect(results.every((result) => result?.url === `${pinned}/resolved.js`)).toBe(true);
+		expect(debug).not.toHaveBeenCalled();
+		const files = await readdir(cache);
+		expect(files).toHaveLength(1);
+		expect(files[0]).toMatch(/^[0-9a-f]{64}\.json$/);
+		const second = await resolveDependency(pinned, options);
+		expect(second?.main).toBe(`export default "${pinned}";`);
+		expect(calls).toHaveLength(8);
+		debug.mockRestore();
+	});
+
+	it("should remove the temporary file when a cache write fails", async () => {
+		const debug = vi.spyOn(console, "debug").mockImplementation(() => {});
+		const pinned = "https://esm.sh/react@18.2.0";
+		const entry = `${createHash("sha256").update(pinned).digest("hex")}.json`;
+		await mkdir(path.join(cache, entry, "blocker"), { recursive: true });
+
+		const dependency = await resolveDependency(pinned, { cache, fetchImpl: countingFetch([]) });
+
+		expect(dependency?.url).toBe(`${pinned}/resolved.js`);
+		expect(debug).toHaveBeenCalledOnce();
+		expect(await readdir(cache)).toEqual([entry]);
+		debug.mockRestore();
 	});
 });
