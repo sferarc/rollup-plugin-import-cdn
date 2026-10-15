@@ -9,7 +9,6 @@ rollup-plugin-import-cdn lets Rollup import ESM packages and URLs from a CDN and
 | `src/index.ts` | `importCdn(options)`: picks a fetch implementation, wraps it in a per-build memo (the `responses` map), and returns the plugin object named `plugin-import-cdn` with `buildStart`, `resolveId` and `load`. `buildStart` clears the memo and `moduleUrls`, the map from module id to the URL it was served from that `resolveId` uses to resolve relative imports inside a CDN module ([[resolution]]). `isForeignId` matches `\0` virtual ids, `node:` and builtin modules, and absolute paths; `load` skips those ids, and so does `resolveId` unless the id is relative to a CDN importer |
 | `src/load.ts` | `resolveDependency` ([[resolution]]) and `loadHook` ([[import-rewriting]]) |
 | `src/types.ts` | `PluginOptions`, `FetchImpl`, `AvailableCDNs`, `Dependency`; all re-exported from `src/index.ts` |
-| `src/utils.ts` | the `PartialBy` type helper that makes `fetchImpl` optional |
 
 ## Options
 

@@ -3,7 +3,9 @@ import path from "node:path";
 import type { Plugin as RollupPlugin } from "rollup";
 import { isRelativeReference, loadHook, resolveDependency } from "./load";
 import { availableCDNs, type FetchImpl, type PluginOptions } from "./types";
-import type { PartialBy } from "./utils";
+
+type ImportCdnOptions = Omit<PluginOptions, "fetchImpl"> &
+	Partial<Pick<PluginOptions, "fetchImpl">>;
 
 type FetchedResponse = Omit<Awaited<ReturnType<FetchImpl>>, "text"> & { body: string };
 
@@ -21,7 +23,7 @@ const isHttpUrl = (id: string) => /^https?:\/\//.test(id);
 const isKnownCdn = (value: unknown) =>
 	typeof value === "string" && (availableCDNs as readonly string[]).includes(value);
 
-function validateOptions({ priority, cache }: PartialBy<PluginOptions, "fetchImpl">) {
+function validateOptions({ priority, cache }: ImportCdnOptions) {
 	if (priority !== undefined) {
 		const entries: unknown[] = Array.isArray(priority) ? priority : [priority];
 		for (const entry of entries) {
@@ -38,7 +40,7 @@ function validateOptions({ priority, cache }: PartialBy<PluginOptions, "fetchImp
 	}
 }
 
-export function importCdn(pluginOptions: PartialBy<PluginOptions, "fetchImpl"> = {}): RollupPlugin {
+export function importCdn(pluginOptions: ImportCdnOptions = {}): RollupPlugin {
 	validateOptions(pluginOptions);
 
 	const globalFetch = typeof fetch !== "undefined" ? fetch : undefined;
