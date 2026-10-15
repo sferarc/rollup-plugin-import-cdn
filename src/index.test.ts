@@ -31,10 +31,44 @@ describe("importCdn", () => {
 		globalThis.fetch = undefined;
 
 		expect(() => importCdn()).toThrow(
-			"A fetch implementation is required for plugin-import-cdn to work.",
+			"[rollup-plugin-import-cdn] No fetch implementation found. Run Rollup on a Node version with a global fetch, or pass one as the fetchImpl option.",
 		);
 
 		globalThis.fetch = originalFetch;
+	});
+
+	describe("option validation", () => {
+		const fetchImpl = createMockFetch({});
+
+		it("rejects an unknown CDN name in priority", () => {
+			expect(() => importCdn({ fetchImpl, priority: ["unpkg" as never] })).toThrow(
+				'[rollup-plugin-import-cdn] Unknown CDN "unpkg" in priority; expected one of: skypack, or a function (key) => url',
+			);
+		});
+
+		it("rejects a priority entry that is neither a name nor a function", () => {
+			expect(() => importCdn({ fetchImpl, priority: [42 as never] })).toThrow('Unknown CDN "42"');
+		});
+
+		it("rejects a priority that is not an array", () => {
+			expect(() => importCdn({ fetchImpl, priority: "skypak" as never })).toThrow(
+				'Unknown CDN "skypak"',
+			);
+		});
+
+		it("accepts known names and functions", () => {
+			expect(() =>
+				importCdn({ fetchImpl, priority: ["skypack", (key) => `https://esm.sh/${key}`] }),
+			).not.toThrow();
+		});
+
+		it("rejects an empty cache directory", () => {
+			expect(() => importCdn({ fetchImpl, cache: "" })).toThrow("cache option");
+		});
+
+		it("rejects a non-string cache directory", () => {
+			expect(() => importCdn({ fetchImpl, cache: true as never })).toThrow("cache option");
+		});
 	});
 
 	it("should use global fetch when available", () => {

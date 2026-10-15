@@ -1,4 +1,6 @@
-export type AvailableCDNs = "skypack";
+export const availableCDNs = ["skypack"] as const;
+
+export type AvailableCDNs = (typeof availableCDNs)[number];
 
 export type FetchImpl = (
 	url: string,
