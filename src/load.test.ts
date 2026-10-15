@@ -599,8 +599,8 @@ describe("resolveDependency cache", () => {
 		expect(calls).toHaveLength(2);
 		expect(dependency?.main).toBe(`export default "${pinned}";`);
 		expect(warn).toHaveBeenCalledOnce();
-		expect(warn.mock.calls[0][0]).toContain(path.join(cache, file));
-		expect(warn.mock.calls[0][0]).toContain(pinned);
+		expect(warn.mock.calls[0]![0]).toContain(path.join(cache, file!));
+		expect(warn.mock.calls[0]![0]).toContain(pinned);
 		warn.mockRestore();
 	});
 
@@ -663,7 +663,7 @@ describe("resolveDependency cache", () => {
 		expect(calls).toHaveLength(2);
 		expect(dependency?.url).toBe(`${pinned}/resolved.js`);
 		expect(warn).toHaveBeenCalledOnce();
-		expect(warn.mock.calls[0][0]).toContain(path.join(cache, file));
+		expect(warn.mock.calls[0]![0]).toContain(path.join(cache, file!));
 		warn.mockRestore();
 	});
 
