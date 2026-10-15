@@ -592,15 +592,15 @@ describe("resolveDependency cache", () => {
 
 		await resolveDependency(pinned, options);
 		const [file] = await readdir(cache);
-		await writeFile(path.join(cache, file), "{not json");
+		await writeFile(path.join(cache, file!), "{not json");
 		const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
 		const dependency = await resolveDependency(pinned, options);
 
 		expect(calls).toHaveLength(2);
 		expect(dependency?.main).toBe(`export default "${pinned}";`);
 		expect(warn).toHaveBeenCalledOnce();
-		expect(warn.mock.calls[0][0]).toContain(path.join(cache, file));
-		expect(warn.mock.calls[0][0]).toContain(pinned);
+		expect(warn.mock.calls[0]![0]).toContain(path.join(cache, file!));
+		expect(warn.mock.calls[0]![0]).toContain(pinned);
 		warn.mockRestore();
 	});
 
@@ -656,14 +656,14 @@ describe("resolveDependency cache", () => {
 
 		await resolveDependency(pinned, options);
 		const [file] = await readdir(cache);
-		await writeFile(path.join(cache, file), JSON.stringify(entry));
+		await writeFile(path.join(cache, file!), JSON.stringify(entry));
 		const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
 		const dependency = await resolveDependency(pinned, options);
 
 		expect(calls).toHaveLength(2);
 		expect(dependency?.url).toBe(`${pinned}/resolved.js`);
 		expect(warn).toHaveBeenCalledOnce();
-		expect(warn.mock.calls[0][0]).toContain(path.join(cache, file));
+		expect(warn.mock.calls[0]![0]).toContain(path.join(cache, file!));
 		warn.mockRestore();
 	});
 

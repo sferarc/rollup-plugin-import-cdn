@@ -17,8 +17,8 @@ export const isRelativeReference = (value: string) => /^\.{0,2}\//.test(value);
 // `name` is `pkg` or `@scope/pkg`; `subpath` is the rest, starting with `/` or, when the
 // specifier carries its own version, with `@`.
 function splitSpecifier(key: string): { name: string; subpath: string } {
-	const match = /^(@[^/]+\/[^/@]+|[^/@]+)(.*)$/.exec(key);
-	return match ? { name: match[1], subpath: match[2] } : { name: key, subpath: "" };
+	const [, name = key, subpath = ""] = /^(@[^/]+\/[^/@]+|[^/@]+)(.*)$/.exec(key) ?? [];
+	return { name, subpath };
 }
 
 const withVersion = (key: string, version?: string) => {
