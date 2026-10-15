@@ -44,22 +44,38 @@ function isPinnedUrl(value: string) {
 	return /@\d+\.\d+\.\d+(?:[-+][\w.-]+)?(?=\/|$)/.test(new URL(value).pathname);
 }
 
-const isHttpUrl = (value: unknown) =>
+const isHttpUrl = (value: unknown): value is string =>
 	typeof value === "string" && URL.canParse(value) && /^https?:$/.test(new URL(value).protocol);
 
 const cacheFile = (dir: string, cdnUrl: string) =>
 	path.join(dir, `${createHash("sha256").update(cdnUrl).digest("hex")}.json`);
 
+const errorMessage = (error: unknown) => (error instanceof Error ? error.message : String(error));
+
+function warnCache(action: string, file: string, cdnUrl: string, reason: string) {
+	console.warn(
+		`[rollup-plugin-import-cdn] Could not ${action} cache entry ${file} for ${cdnUrl}: ${reason}`,
+	);
+}
+
 async function readCache(
 	dir: string,
 	cdnUrl: string,
 ): Promise<Pick<Dependency, "url" | "main"> | null> {
+	const file = cacheFile(dir, cdnUrl);
+	let entry: unknown;
 	try {
-		const entry = JSON.parse(await readFile(cacheFile(dir, cdnUrl), "utf8"));
-		return isHttpUrl(entry?.url) && typeof entry.main === "string" ? entry : null;
-	} catch {
+		entry = JSON.parse(await readFile(file, "utf8"));
+	} catch (error) {
+		if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+			warnCache("read", file, cdnUrl, errorMessage(error));
+		}
 		return null;
 	}
+	const { url, main } = (entry ?? {}) as Record<string, unknown>;
+	if (isHttpUrl(url) && typeof main === "string") return { url, main };
+	warnCache("read", file, cdnUrl, "expected an http(s) `url` and a string `main`");
+	return null;
 }
 
 async function writeCache(dir: string, cdnUrl: string, entry: Pick<Dependency, "url" | "main">) {
@@ -71,7 +87,7 @@ async function writeCache(dir: string, cdnUrl: string, entry: Pick<Dependency, "
 		await rename(temporary, file);
 	} catch (error) {
 		await rm(temporary, { force: true }).catch(() => {});
-		console.debug(`Error writing cache for ${cdnUrl}`, error);
+		warnCache("write", file, cdnUrl, errorMessage(error));
 	}
 }
 

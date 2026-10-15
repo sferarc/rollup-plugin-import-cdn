@@ -490,17 +490,35 @@ describe("resolveDependency cache", () => {
 		expect(await readdir(cache)).toEqual([]);
 	});
 
-	it("should refetch when the cache entry is corrupt", async () => {
+	it("should resolve without output when the cache entry is missing", async () => {
+		const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+		const debug = vi.spyOn(console, "debug").mockImplementation(() => {});
+
+		await resolveDependency("https://esm.sh/react@18.2.0", { cache, fetchImpl: countingFetch([]) });
+
+		expect(warn).not.toHaveBeenCalled();
+		expect(debug).not.toHaveBeenCalled();
+		warn.mockRestore();
+		debug.mockRestore();
+	});
+
+	it("should warn once and refetch when the cache entry is not JSON", async () => {
 		const calls: string[] = [];
 		const options: PluginOptions = { cache, fetchImpl: countingFetch(calls) };
 		const pinned = "https://esm.sh/react@18.2.0";
 
 		await resolveDependency(pinned, options);
 		const [file] = await readdir(cache);
-		await writeFile(path.join(cache, file), "not json");
-		await resolveDependency(pinned, options);
+		await writeFile(path.join(cache, file), "{not json");
+		const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+		const dependency = await resolveDependency(pinned, options);
 
 		expect(calls).toHaveLength(2);
+		expect(dependency?.main).toBe(`export default "${pinned}";`);
+		expect(warn).toHaveBeenCalledOnce();
+		expect(warn.mock.calls[0][0]).toContain(path.join(cache, file));
+		expect(warn.mock.calls[0][0]).toContain(pinned);
+		warn.mockRestore();
 	});
 
 	it.each([
@@ -556,14 +574,18 @@ describe("resolveDependency cache", () => {
 		await resolveDependency(pinned, options);
 		const [file] = await readdir(cache);
 		await writeFile(path.join(cache, file), JSON.stringify(entry));
+		const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
 		const dependency = await resolveDependency(pinned, options);
 
 		expect(calls).toHaveLength(2);
 		expect(dependency?.url).toBe(`${pinned}/resolved.js`);
+		expect(warn).toHaveBeenCalledOnce();
+		expect(warn.mock.calls[0][0]).toContain(path.join(cache, file));
+		warn.mockRestore();
 	});
 
 	it("should leave one valid entry when concurrent resolves write the same URL", async () => {
-		const debug = vi.spyOn(console, "debug").mockImplementation(() => {});
+		const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
 		const calls: string[] = [];
 		const options: PluginOptions = { cache, fetchImpl: countingFetch(calls) };
 		const pinned = "https://esm.sh/react@18.2.0";
@@ -573,18 +595,18 @@ describe("resolveDependency cache", () => {
 		);
 
 		expect(results.every((result) => result?.url === `${pinned}/resolved.js`)).toBe(true);
-		expect(debug).not.toHaveBeenCalled();
+		expect(warn).not.toHaveBeenCalled();
 		const files = await readdir(cache);
 		expect(files).toHaveLength(1);
 		expect(files[0]).toMatch(/^[0-9a-f]{64}\.json$/);
 		const second = await resolveDependency(pinned, options);
 		expect(second?.main).toBe(`export default "${pinned}";`);
 		expect(calls).toHaveLength(8);
-		debug.mockRestore();
+		warn.mockRestore();
 	});
 
-	it("should remove the temporary file when a cache write fails", async () => {
-		const debug = vi.spyOn(console, "debug").mockImplementation(() => {});
+	it("should warn and remove the temporary file when a cache write fails", async () => {
+		const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
 		const pinned = "https://esm.sh/react@18.2.0";
 		const entry = `${createHash("sha256").update(pinned).digest("hex")}.json`;
 		await mkdir(path.join(cache, entry, "blocker"), { recursive: true });
@@ -592,8 +614,32 @@ describe("resolveDependency cache", () => {
 		const dependency = await resolveDependency(pinned, { cache, fetchImpl: countingFetch([]) });
 
 		expect(dependency?.url).toBe(`${pinned}/resolved.js`);
-		expect(debug).toHaveBeenCalledOnce();
+		const messages = warn.mock.calls.map(([message]) => String(message));
+		expect(messages).toHaveLength(2);
+		expect(messages[0]).toContain(`Could not read cache entry ${path.join(cache, entry)}`);
+		expect(messages[1]).toContain(`Could not write cache entry ${path.join(cache, entry)}`);
 		expect(await readdir(cache)).toEqual([entry]);
-		debug.mockRestore();
+		warn.mockRestore();
+	});
+
+	it("should warn and leave no temporary file when the cache directory cannot be created", async () => {
+		const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+		const pinned = "https://esm.sh/react@18.2.0";
+		const blocker = path.join(cache, "not-a-directory");
+		await writeFile(blocker, "");
+		const dir = path.join(blocker, "cache");
+
+		const dependency = await resolveDependency(pinned, {
+			cache: dir,
+			fetchImpl: countingFetch([]),
+		});
+
+		expect(dependency?.url).toBe(`${pinned}/resolved.js`);
+		const write = warn.mock.calls
+			.map(([message]) => String(message))
+			.find((m) => m.includes("write"));
+		expect(write).toContain(dir);
+		expect(await readdir(cache)).toEqual(["not-a-directory"]);
+		warn.mockRestore();
 	});
 });
