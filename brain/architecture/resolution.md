@@ -26,7 +26,9 @@ These URLs end the version with `/` or the string end, so `isPinnedUrl` matches 
 
 ## Fallback
 
-`resolveDependency` tries the URLs in order. When `cache` is set and the URL matches `isPinnedUrl`, `readCache` runs before the fetch and a valid entry returns its `url` and `main` without one; after a successful fetch, `writeCache` stores them (#7, `src/load.test.ts`, "should not refetch a pinned URL on the next resolve", "should not cache error responses", "should refetch when the cache entry is corrupt").
+`resolveDependency` tries the URLs in order. When `cache` is set and the URL matches `isPinnedUrl`, `readCache` runs before the fetch and a valid entry returns its `url` and `main` without one; after a successful fetch, `writeCache` stores them (#7, `src/load.test.ts`, "should not refetch a pinned URL on the next resolve", "should not cache error responses").
+
+A missing cache file is silent. Any other read failure (invalid JSON, `EACCES`, `EISDIR`) or an entry without an http(s) `url` and a string `main` emits one `console.warn` naming the cache file, the CDN URL and the reason, then falls through to the fetch. A failed write warns the same way and removes its temporary file. No cache failure throws (#29, "should resolve without output when the cache entry is missing", "should warn once and refetch when the cache entry is not JSON", "should warn and leave no temporary file when the cache directory cannot be created"). Before #29 read failures were silent and write failures went to `console.debug`.
 
 Otherwise it calls `fetchImpl`. The first OK response whose `text()` does not throw wins, and its `response.url` is recorded so redirects are followed for later rewriting ([[import-rewriting]]). Every other attempt is recorded with its URL and reason, and the next URL is tried: `HTTP <status>` for a non-OK response (#6, 803e533), or the thrown error's message with its `cause` message in parentheses, since undici's `fetch failed` keeps the DNS, TLS or proxy reason there ("should try multiple CDNs in priority order", "should fall back to the next CDN when one responds with an error").
 
