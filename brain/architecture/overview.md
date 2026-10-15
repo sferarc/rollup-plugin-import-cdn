@@ -6,24 +6,23 @@ rollup-plugin-import-cdn lets Rollup import ESM packages and URLs from a CDN and
 
 | File | Role |
 | --- | --- |
-| `src/index.ts` | `importCdn(options)`: picks a fetch implementation and returns the plugin object named `plugin-import-cdn` with `resolveId` and `load` |
+| `src/index.ts` | `importCdn(options)`: picks a fetch implementation, wraps it in a per-build memo (the `responses` map), and returns the plugin object named `plugin-import-cdn` with `buildStart`, `resolveId` and `load`. `buildStart` clears the memo and `moduleUrls`, the map from module id to the URL it was served from that `resolveId` uses to resolve relative imports inside a CDN module ([[resolution]]). `isForeignId` matches `\0` virtual ids, `node:` and builtin modules, and absolute paths; `load` skips those ids, and so does `resolveId` unless the id is relative to a CDN importer |
 | `src/load.ts` | `resolveDependency` ([[resolution]]) and `loadHook` ([[import-rewriting]]) |
 | `src/types.ts` | `PluginOptions`, `FetchImpl`, `AvailableCDNs`, `Dependency`; all re-exported from `src/index.ts` |
-| `src/utils.ts` | the `PartialBy` type helper that makes `fetchImpl` optional |
 
 ## Options
 
 `PluginOptions` in `src/types.ts`:
 
-- `fetchImpl`: optional. Defaults to the global `fetch`; `importCdn` throws if neither exists (`src/index.ts`, `src/index.test.ts`).
-- `priority`: CDNs to try in order, each `"skypack"` or a function from specifier to URL. Defaults to `["skypack"]`.
+- `fetchImpl`: optional. Defaults to the global `fetch`; `importCdn` throws if neither exists, telling the user to run on a Node version with global `fetch` or pass `fetchImpl` (`src/index.ts`, `src/index.test.ts`).
+- `priority`: CDNs to try in order, each a name from `availableCDNs` in `src/types.ts` (only `"skypack"`) or a function from specifier to URL. Defaults to `["skypack"]`. Since #31 `importCdn` throws at construction on any other entry, naming it, rather than failing on the first import (`src/index.test.ts`, "option validation").
 - `versions`: a map from package name or full specifier to version. The built-in `skypack` entry inserts it after the package name, and custom `priority` functions receive it as their second argument ([[resolution]]).
-- `cache`: optional directory. When set, a response for a URL containing an exact `@x.y.z` is stored as `<sha256 of the URL>.json` (`url` after redirects, and `main`) and read back instead of fetching; read and write failures fall back to a fetch (`src/load.ts`, `src/load.test.ts`).
+- `cache`: optional directory. When set, a response for a URL containing an exact `@x.y.z` is stored as `<sha256 of the URL>.json` (`url` after redirects, and `main`) and read back instead of fetching; read and write failures warn, except a missing entry, and fall back to a fetch ([[resolution]], `src/load.ts`, `src/load.test.ts`). An empty or non-string value throws at construction (#31).
 
 ## Things the code does not do
 
-Read from `src/load.ts` on 2026-10-08, not covered by a test:
+Read from `src/index.ts` and `src/load.ts` on 2026-10-15:
 
-- No cache unless `cache` is set, and then only for versioned URLs. Otherwise `resolveId` fetches a module to resolve it and `load` fetches it again.
-- A non-OK response from every CDN fails the build with an error naming the URL and status (`src/load.test.ts`); a non-OK response from one CDN moves on to the next.
+- No cache across builds unless `cache` is set, and then only for versioned URLs. Within a build, the memo in `importCdn` fetches each URL once, so `resolveId` and `load` share one response, and `buildStart` clears it so the next build fetches again (`src/index.test.ts`: "fetches a module once for resolveId followed by load", "refetches after buildStart").
+- A non-OK response from one CDN moves on to the next. When no CDN succeeds and at least one answered non-OK, the build fails with an error listing every attempted URL with its HTTP status or network error; when every attempt was a network error, the plugin warns with the same list and leaves the id unresolved (`src/load.test.ts`).
 - `src/load.ts` imports `node:url`, so the plugin runs where Rollup runs on Node, not in a browser build of Rollup.

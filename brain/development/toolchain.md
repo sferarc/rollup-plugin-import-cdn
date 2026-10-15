@@ -2,7 +2,7 @@
 
 ## Node and pnpm
 
-`mise.toml` pins exact Node and pnpm versions (read the file rather than a copy here, which drifts), and `mise.lock` records their checksums per platform. `package.json` `packageManager` names the same pnpm. With mise installed, `mise install` in the repo root provides both. After changing a version in `mise.toml`, run `mise lock` and commit both files. `package.json` sets no `engines` field, so the supported Node range for consumers is unknown.
+`mise.toml` pins exact Node and pnpm versions (read the file rather than a copy here, which drifts), and `mise.lock` records their checksums per platform. `package.json` `packageManager` names the same pnpm. With mise installed, `mise trust` (once per clone, since mise refuses an untrusted `mise.toml`) and then `mise install` in the repo root provide both. After changing a version in `mise.toml`, run `mise lock` and commit both files. `package.json` sets no `engines` field, so the supported Node range for consumers is unknown.
 
 ## Commands
 
@@ -10,6 +10,7 @@ From `package.json`:
 
 ```bash
 pnpm install --frozen-lockfile
+pnpm check             # everything CI's Check job runs, in order; run before a PR
 pnpm lint              # biome check, read-only
 pnpm fix               # biome check --write
 pnpm knip              # unused files, exports and dependencies

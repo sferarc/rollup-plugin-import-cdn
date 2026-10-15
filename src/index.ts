@@ -2,8 +2,10 @@ import { builtinModules } from "node:module";
 import path from "node:path";
 import type { Plugin as RollupPlugin } from "rollup";
 import { isRelativeReference, loadHook, resolveDependency } from "./load";
-import type { FetchImpl, PluginOptions } from "./types";
-import type { PartialBy } from "./utils";
+import { availableCDNs, type FetchImpl, type PluginOptions } from "./types";
+
+type ImportCdnOptions = Omit<PluginOptions, "fetchImpl"> &
+	Partial<Pick<PluginOptions, "fetchImpl">>;
 
 type FetchedResponse = Omit<Awaited<ReturnType<FetchImpl>>, "text"> & { body: string };
 
@@ -18,11 +20,35 @@ const isForeignId = (id: string) =>
 
 const isHttpUrl = (id: string) => /^https?:\/\//.test(id);
 
-export function importCdn(pluginOptions: PartialBy<PluginOptions, "fetchImpl"> = {}): RollupPlugin {
+const isKnownCdn = (value: unknown) =>
+	typeof value === "string" && (availableCDNs as readonly string[]).includes(value);
+
+function validateOptions({ priority, cache }: ImportCdnOptions) {
+	if (priority !== undefined) {
+		const entries: unknown[] = Array.isArray(priority) ? priority : [priority];
+		for (const entry of entries) {
+			if (typeof entry === "function" || isKnownCdn(entry)) continue;
+			throw new Error(
+				`[rollup-plugin-import-cdn] Unknown CDN "${String(entry)}" in priority; expected one of: ${availableCDNs.join(", ")}, or a function (key) => url`,
+			);
+		}
+	}
+	if (cache !== undefined && (typeof cache !== "string" || cache === "")) {
+		throw new Error(
+			"[rollup-plugin-import-cdn] The cache option must be a non-empty directory path when set.",
+		);
+	}
+}
+
+export function importCdn(pluginOptions: ImportCdnOptions = {}): RollupPlugin {
+	validateOptions(pluginOptions);
+
 	const globalFetch = typeof fetch !== "undefined" ? fetch : undefined;
 	const baseFetch = pluginOptions.fetchImpl ?? globalFetch;
 	if (!baseFetch) {
-		throw new Error("A fetch implementation is required for plugin-import-cdn to work.");
+		throw new Error(
+			"[rollup-plugin-import-cdn] No fetch implementation found. Run Rollup on a Node version with a global fetch, or pass one as the fetchImpl option.",
+		);
 	}
 
 	// resolveId and load both resolve the same id, so each URL is fetched once per build.

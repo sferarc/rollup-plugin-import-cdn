@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { importCdn } from "./index";
+import { hooks } from "./test-utils";
 import type { FetchImpl } from "./types";
 
 const createMockFetch = (responses: Record<string, string>): FetchImpl => {
@@ -31,10 +32,44 @@ describe("importCdn", () => {
 		globalThis.fetch = undefined;
 
 		expect(() => importCdn()).toThrow(
-			"A fetch implementation is required for plugin-import-cdn to work.",
+			"[rollup-plugin-import-cdn] No fetch implementation found. Run Rollup on a Node version with a global fetch, or pass one as the fetchImpl option.",
 		);
 
 		globalThis.fetch = originalFetch;
+	});
+
+	describe("option validation", () => {
+		const fetchImpl = createMockFetch({});
+
+		it("rejects an unknown CDN name in priority", () => {
+			expect(() => importCdn({ fetchImpl, priority: ["unpkg" as never] })).toThrow(
+				'[rollup-plugin-import-cdn] Unknown CDN "unpkg" in priority; expected one of: skypack, or a function (key) => url',
+			);
+		});
+
+		it("rejects a priority entry that is neither a name nor a function", () => {
+			expect(() => importCdn({ fetchImpl, priority: [42 as never] })).toThrow('Unknown CDN "42"');
+		});
+
+		it("rejects a priority that is not an array", () => {
+			expect(() => importCdn({ fetchImpl, priority: "skypak" as never })).toThrow(
+				'Unknown CDN "skypak"',
+			);
+		});
+
+		it("accepts known names and functions", () => {
+			expect(() =>
+				importCdn({ fetchImpl, priority: ["skypack", (key) => `https://esm.sh/${key}`] }),
+			).not.toThrow();
+		});
+
+		it("rejects an empty cache directory", () => {
+			expect(() => importCdn({ fetchImpl, cache: "" })).toThrow("cache option");
+		});
+
+		it("rejects a non-string cache directory", () => {
+			expect(() => importCdn({ fetchImpl, cache: true as never })).toThrow("cache option");
+		});
 	});
 
 	it("should use global fetch when available", () => {
@@ -60,7 +95,7 @@ describe("importCdn", () => {
 
 		const plugin = importCdn({ fetchImpl: customFetch });
 
-		const resolveId = plugin.resolveId as (id: string) => Promise<string | undefined>;
+		const { resolveId } = hooks(plugin);
 		const result = await resolveId("custom");
 
 		expect(result).toBe("custom");
@@ -74,7 +109,7 @@ describe("importCdn", () => {
 				}),
 			});
 
-			const resolveId = plugin.resolveId as (id: string) => Promise<string | undefined>;
+			const { resolveId } = hooks(plugin);
 			const result = await resolveId("lodash");
 
 			expect(result).toBe("lodash");
@@ -85,7 +120,7 @@ describe("importCdn", () => {
 				fetchImpl: createMockFetch({}),
 			});
 
-			const resolveId = plugin.resolveId as (id: string) => Promise<string | undefined>;
+			const { resolveId } = hooks(plugin);
 
 			expect(await resolveId("./local")).toBeUndefined();
 			expect(await resolveId("/absolute")).toBeUndefined();
@@ -99,7 +134,7 @@ describe("importCdn", () => {
 				fetchImpl: createMockFetch({}),
 			});
 
-			const resolveId = plugin.resolveId as (id: string) => Promise<string | undefined>;
+			const { resolveId } = hooks(plugin);
 			const result = await resolveId("nonexistent");
 
 			expect(result).toBeUndefined();
@@ -115,7 +150,7 @@ describe("importCdn", () => {
 				}),
 			});
 
-			const load = plugin.load as (id: string) => Promise<string | undefined>;
+			const { load } = hooks(plugin);
 			const result = await load("my-package");
 
 			expect(result).toBe(moduleContent);
@@ -129,7 +164,7 @@ describe("importCdn", () => {
 				}),
 			});
 
-			const load = plugin.load as (id: string) => Promise<string | undefined>;
+			const { load } = hooks(plugin);
 			const result = await load("my-package");
 
 			expect(result).toContain("https://cdn.skypack.dev/util.js");
@@ -145,7 +180,7 @@ describe("importCdn", () => {
 				priority: [(key) => `https://esm.sh/${key}`],
 			});
 
-			const resolveId = plugin.resolveId as (id: string) => Promise<string | undefined>;
+			const { resolveId } = hooks(plugin);
 			const result = await resolveId("react");
 
 			expect(result).toBe("react");
@@ -161,7 +196,7 @@ describe("importCdn", () => {
 				},
 			});
 
-			const resolveId = plugin.resolveId as (id: string) => Promise<string | undefined>;
+			const { resolveId } = hooks(plugin);
 			const result = await resolveId("react");
 
 			expect(result).toBe("react");
@@ -173,8 +208,7 @@ describe("importCdn", () => {
 				createMockFetch({ "https://cdn.skypack.dev/memo": "export const memo = 1;" }),
 			);
 			const plugin = importCdn({ fetchImpl });
-			const resolveId = plugin.resolveId as (id: string) => Promise<string | undefined>;
-			const load = plugin.load as (id: string) => Promise<string | undefined>;
+			const { resolveId, load } = hooks(plugin);
 
 			expect(await resolveId("memo")).toBe("memo");
 			expect(await load("memo")).toBe("export const memo = 1;");
@@ -186,9 +220,7 @@ describe("importCdn", () => {
 				createMockFetch({ "https://cdn.skypack.dev/memo": "export const memo = 1;" }),
 			);
 			const plugin = importCdn({ fetchImpl });
-			const buildStart = plugin.buildStart as () => void;
-			const resolveId = plugin.resolveId as (id: string) => Promise<string | undefined>;
-			const load = plugin.load as (id: string) => Promise<string | undefined>;
+			const { buildStart, resolveId, load } = hooks(plugin);
 
 			buildStart();
 			await resolveId("memo");
@@ -202,8 +234,6 @@ describe("importCdn", () => {
 	});
 
 	describe("importer-relative specifiers", () => {
-		type ResolveId = (id: string, importer?: string) => Promise<string | undefined>;
-
 		it("resolves a relative dynamic import against the CDN module's URL", async () => {
 			const fetchImpl = vi.fn(
 				createMockFetch({
@@ -212,8 +242,7 @@ describe("importCdn", () => {
 				}),
 			);
 			const plugin = importCdn({ fetchImpl, priority: [() => "https://cdn.test/pkg/index.js"] });
-			const resolveId = plugin.resolveId as ResolveId;
-			const load = plugin.load as (id: string) => Promise<string | undefined>;
+			const { resolveId, load } = hooks(plugin);
 
 			expect(await resolveId("pkg")).toBe("pkg");
 			expect(await load("pkg")).toContain('import("./chunk.js")');
@@ -229,7 +258,7 @@ describe("importCdn", () => {
 				}),
 				priority: [() => "https://cdn.test/pkg/index.js"],
 			});
-			const resolveId = plugin.resolveId as ResolveId;
+			const { resolveId } = hooks(plugin);
 
 			await resolveId("pkg");
 			expect(await resolveId("/-/dep@1.0.0/x.js", "pkg")).toBe("https://cdn.test/-/dep@1.0.0/x.js");
@@ -244,7 +273,7 @@ describe("importCdn", () => {
 				}),
 				priority: [() => "https://cdn.test/pkg"],
 			});
-			const resolveId = plugin.resolveId as ResolveId;
+			const { resolveId } = hooks(plugin);
 
 			await resolveId("pkg");
 			expect(await resolveId("./chunk.js", "pkg")).toBe("https://cdn.test/pkg@1.0.0/chunk.js");
@@ -254,7 +283,7 @@ describe("importCdn", () => {
 			const plugin = importCdn({
 				fetchImpl: createMockFetch({ "https://cdn.test/a/b.js": "export {};" }),
 			});
-			const resolveId = plugin.resolveId as ResolveId;
+			const { resolveId } = hooks(plugin);
 
 			expect(await resolveId("../b.js", "https://cdn.test/a/c/d.js")).toBe(
 				"https://cdn.test/a/b.js",
@@ -269,8 +298,7 @@ describe("importCdn", () => {
 				}),
 				priority: [() => "https://cdn.test/pkg/index.js"],
 			});
-			const resolveId = plugin.resolveId as ResolveId;
-			const load = plugin.load as (id: string) => Promise<string | undefined>;
+			const { resolveId, load } = hooks(plugin);
 
 			expect(await resolveId("pkg")).toBe("pkg");
 			const code = await load("pkg");
@@ -286,7 +314,7 @@ describe("importCdn", () => {
 				}),
 				priority: [() => "https://cdn.test/pkg/index.js"],
 			});
-			const resolveId = plugin.resolveId as ResolveId;
+			const { resolveId } = hooks(plugin);
 
 			await resolveId("pkg");
 			expect(await resolveId("//other.test/x.js", "pkg")).toBe("https://other.test/x.js");
@@ -301,7 +329,7 @@ describe("importCdn", () => {
 				}),
 				priority: [() => "https://cdn.test/pkg"],
 			});
-			const resolveId = plugin.resolveId as ResolveId;
+			const { resolveId } = hooks(plugin);
 
 			await resolveId("pkg");
 			expect(await resolveId("//other.test/x.js", "pkg")).toBe("http://other.test/x.js");
@@ -310,7 +338,7 @@ describe("importCdn", () => {
 		it("leaves a protocol-relative id from a local file to Rollup", async () => {
 			const fetchImpl = vi.fn(createMockFetch({}));
 			const plugin = importCdn({ fetchImpl });
-			const resolveId = plugin.resolveId as ResolveId;
+			const { resolveId } = hooks(plugin);
 
 			expect(await resolveId("//other.test/x.js", "/abs/src/main.js")).toBeUndefined();
 			expect(await resolveId("//other.test/x.js")).toBeUndefined();
@@ -320,7 +348,7 @@ describe("importCdn", () => {
 		it("leaves relative imports from local files to Rollup", async () => {
 			const fetchImpl = vi.fn(createMockFetch({}));
 			const plugin = importCdn({ fetchImpl });
-			const resolveId = plugin.resolveId as ResolveId;
+			const { resolveId } = hooks(plugin);
 
 			expect(await resolveId("./chunk.js", "/abs/src/main.js")).toBeUndefined();
 			expect(await resolveId("/abs/src/other.js", "/abs/src/main.js")).toBeUndefined();
@@ -331,8 +359,7 @@ describe("importCdn", () => {
 		it("forgets importer URLs after buildStart", async () => {
 			const fetchImpl = vi.fn(createMockFetch({ "https://cdn.test/pkg/index.js": "export {};" }));
 			const plugin = importCdn({ fetchImpl, priority: [() => "https://cdn.test/pkg/index.js"] });
-			const buildStart = plugin.buildStart as () => void;
-			const resolveId = plugin.resolveId as ResolveId;
+			const { buildStart, resolveId } = hooks(plugin);
 
 			await resolveId("pkg");
 			buildStart();
@@ -347,8 +374,7 @@ describe("importCdn", () => {
 			async (id) => {
 				const fetchImpl = vi.fn(createMockFetch({}));
 				const plugin = importCdn({ fetchImpl });
-				const resolveId = plugin.resolveId as (id: string) => Promise<string | undefined>;
-				const load = plugin.load as (id: string) => Promise<string | undefined>;
+				const { resolveId, load } = hooks(plugin);
 
 				expect(await resolveId(id)).toBeUndefined();
 				expect(await load(id)).toBeUndefined();
