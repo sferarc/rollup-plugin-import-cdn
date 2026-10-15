@@ -437,6 +437,42 @@ export const combined = a + b;`;
 		expect(result).not.toContain('"./m');
 		expect(elapsed).toBeLessThan(500);
 	});
+
+	it("should name the module and URL when the CDN returns HTML", async () => {
+		const options: PluginOptions = {
+			fetchImpl: async () => ({
+				ok: true,
+				url: "https://portal.test/login",
+				text: async () =>
+					'<!doctype html><html><head><title>Sign in</title></head><body><a href="/x">Log in</a></body></html>',
+			}),
+		};
+
+		const error = await loadHook("portal", options).catch((e: unknown) => e);
+
+		expect(error).toBeInstanceOf(Error);
+		expect((error as Error).message).toMatch(
+			/^\[rollup-plugin-import-cdn\] Could not parse portal from https:\/\/portal\.test\/login: Parse error .*returned HTML rather than a JavaScript module/,
+		);
+		const { cause } = error as { cause?: unknown };
+		expect(cause).toBeInstanceOf(Error);
+		expect((cause as Error).message).toMatch(/^Parse error/);
+	});
+
+	it("should name the module and URL when the source has a syntax error", async () => {
+		const options: PluginOptions = {
+			fetchImpl: createMockFetch({
+				"https://cdn.skypack.dev/broken": "import { from 'x'",
+			}),
+		};
+
+		const error = await loadHook("broken", options).catch((e: unknown) => e);
+
+		expect((error as Error).message).toMatch(
+			/^\[rollup-plugin-import-cdn\] Could not parse broken from https:\/\/cdn\.skypack\.dev\/broken: Parse error/,
+		);
+		expect((error as Error).message).not.toContain("HTML");
+	});
 });
 
 describe("resolveDependency cache", () => {
