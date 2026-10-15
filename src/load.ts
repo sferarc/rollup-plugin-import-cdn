@@ -161,7 +161,21 @@ export async function loadHook(key: string, options: PluginOptions) {
 	await init();
 
 	const { main } = dependency;
-	const [imports] = parse(main);
+	let imports: ReturnType<typeof parse>[0];
+	try {
+		[imports] = parse(main);
+	} catch (cause) {
+		const reason = cause instanceof Error ? cause.message : String(cause);
+		const hint = main.trimStart().startsWith("<")
+			? " (the CDN returned HTML rather than a JavaScript module)"
+			: "";
+		throw Object.assign(
+			new Error(
+				`[rollup-plugin-import-cdn] Could not parse ${dependency.name} from ${dependency.url}: ${reason}${hint}`,
+			),
+			{ cause },
+		);
+	}
 
 	const parts: string[] = [];
 	let last = 0;
