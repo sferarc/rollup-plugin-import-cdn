@@ -1,4 +1,4 @@
-import { rollup } from "rollup";
+import { type Plugin, rollup } from "rollup";
 import { describe, expect, it, vi } from "vitest";
 import { importCdn } from "./index";
 import type { FetchImpl } from "./types";
@@ -310,5 +310,81 @@ describe("Integration: Rollup build", () => {
 		expect(output.map((chunk) => chunk.type === "chunk" && chunk.code).join("\n")).toContain(
 			"const chunk = 1;",
 		);
+	});
+
+	const virtualModules = (modules: Record<string, string>): Plugin => ({
+		name: "virtual",
+		resolveId: (id) => (id in modules ? `\0${id}` : undefined),
+		load: (id) => (id.startsWith("\0") ? modules[id.slice(1)] : undefined),
+	});
+
+	const twoImporters = virtualModules({
+		entry: 'import { a } from "a"; import { b } from "b"; console.log(a, b);',
+		a: 'import { pkg } from "pkg"; export const a = pkg;',
+		b: 'import { pkg } from "pkg"; export const b = pkg;',
+	});
+
+	const build = async (plugins: Plugin[], input = "entry") => {
+		const bundle = await rollup({ input, plugins, onwarn: () => {} });
+		const { output } = await bundle.generate({ format: "es" });
+		await bundle.close();
+		return output[0].code;
+	};
+
+	it("fails the build when the CDN answers 404", async () => {
+		const fetchImpl: FetchImpl = async (url) => ({
+			ok: false,
+			status: 404,
+			url,
+			text: async () => "",
+		});
+
+		await expect(build([importCdn({ fetchImpl })], "missing")).rejects.toThrow(
+			"Failed to fetch missing from https://cdn.skypack.dev/missing: HTTP 404",
+		);
+	});
+
+	it("fetches a module imported from two importers once", async () => {
+		const fetchImpl = vi.fn(
+			createMockCdn({ "https://cdn.skypack.dev/pkg": "export const pkg = 1;" }),
+		);
+
+		const code = await build([twoImporters, importCdn({ fetchImpl })]);
+
+		expect(code).toContain("const pkg = 1;");
+		expect(fetchImpl).toHaveBeenCalledTimes(1);
+	});
+
+	it("memoizes a rejected fetch within a build and retries it on the next build", async () => {
+		vi.spyOn(console, "debug").mockImplementation(() => {});
+		vi.spyOn(console, "warn").mockImplementation(() => {});
+
+		const mockCdn = createMockCdn({ "https://cdn.skypack.dev/pkg": "export const pkg = 1;" });
+		const fetchImpl = vi.fn<FetchImpl>(mockCdn).mockRejectedValueOnce(new Error("socket hang up"));
+		const plugin = importCdn({ fetchImpl });
+
+		const failed = await build([twoImporters, plugin]);
+		expect(failed).not.toContain("const pkg = 1;");
+		expect(fetchImpl).toHaveBeenCalledTimes(1);
+
+		const rebuilt = await build([twoImporters, plugin]);
+		expect(rebuilt).toContain("const pkg = 1;");
+		expect(fetchImpl).toHaveBeenCalledTimes(2);
+	});
+
+	it("does not turn a failed response body into an empty module", async () => {
+		vi.spyOn(console, "debug").mockImplementation(() => {});
+		const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+		const fetchImpl: FetchImpl = async (url) => ({
+			ok: true,
+			url,
+			text: () => Promise.reject(new Error("body stream aborted")),
+		});
+
+		await expect(build([importCdn({ fetchImpl })], "pkg")).rejects.toThrow(
+			/Could not resolve entry module/,
+		);
+		expect(warn).toHaveBeenCalledWith(expect.stringContaining("Could not resolve dependency pkg"));
 	});
 });
