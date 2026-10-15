@@ -191,9 +191,56 @@ describe("resolveDependency", () => {
 
 		expect(result).toBeNull();
 		expect(consoleSpy).toHaveBeenCalledWith(
-			"[rollup-plugin-import-cdn] Could not resolve dependency nonexistent",
+			"[rollup-plugin-import-cdn] Could not resolve dependency nonexistent\n" +
+				"[rollup-plugin-import-cdn] Failed to fetch nonexistent from https://cdn.skypack.dev/nonexistent: Not found: https://cdn.skypack.dev/nonexistent",
 		);
 		consoleSpy.mockRestore();
+	});
+
+	it("should warn with every URL and the underlying cause when all CDNs are unreachable", async () => {
+		const consoleSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+		const options: PluginOptions = {
+			fetchImpl: async (url) => {
+				throw Object.assign(new TypeError("fetch failed"), {
+					cause: new Error(`getaddrinfo ENOTFOUND ${new URL(url).host}`),
+				});
+			},
+			priority: [(key) => `https://a.test/${key}`, (key) => `https://b.test/${key}`],
+		};
+
+		const result = await resolveDependency("pkg", options);
+
+		expect(result).toBeNull();
+		expect(consoleSpy).toHaveBeenCalledWith(
+			[
+				"[rollup-plugin-import-cdn] Could not resolve dependency pkg",
+				"[rollup-plugin-import-cdn] Failed to fetch pkg from https://a.test/pkg: fetch failed (getaddrinfo ENOTFOUND a.test)",
+				"[rollup-plugin-import-cdn] Failed to fetch pkg from https://b.test/pkg: fetch failed (getaddrinfo ENOTFOUND b.test)",
+			].join("\n"),
+		);
+		consoleSpy.mockRestore();
+	});
+
+	it("should throw listing every attempt when HTTP and network failures mix", async () => {
+		const networkError = new Error("connect ECONNREFUSED");
+		const options: PluginOptions = {
+			fetchImpl: async (url) => {
+				if (url.startsWith("https://down.test")) throw networkError;
+				return { ok: false, status: 500, url, text: async () => "oops" };
+			},
+			priority: [(key) => `https://bad.test/${key}`, (key) => `https://down.test/${key}`],
+		};
+
+		const error = await resolveDependency("pkg", options).catch((e: unknown) => e);
+
+		expect(error).toBeInstanceOf(Error);
+		expect((error as Error).message).toBe(
+			[
+				"[rollup-plugin-import-cdn] Failed to fetch pkg from https://bad.test/pkg: HTTP 500",
+				"[rollup-plugin-import-cdn] Failed to fetch pkg from https://down.test/pkg: connect ECONNREFUSED",
+			].join("\n"),
+		);
+		expect((error as { cause?: unknown }).cause).toBe(networkError);
 	});
 });
 
