@@ -1,6 +1,6 @@
 # Architecture
 
-The plugin is a Rollup plugin with three hooks, `buildStart`, `resolveId` and `load`, over about 260 lines of source in `src/`. Start with [[overview]].
+The plugin is a Rollup plugin with three hooks, `buildStart`, `resolveId` and `load`, over about 300 lines of source in `src/`. Start with [[overview]].
 
 ## Start here
 
