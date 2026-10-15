@@ -104,6 +104,22 @@ function resolveDependencyUrls(key: string, options: PluginOptions): string[] {
 	);
 }
 
+function describeError(error: unknown): string {
+	if (!(error instanceof Error)) return String(error);
+	const { cause } = error as { cause?: unknown };
+	if (cause instanceof Error && cause.message) return `${error.message} (${cause.message})`;
+	return error.message;
+}
+
+function formatAttempts(name: string, attempts: { url: string; reason: string }[]): string {
+	return attempts
+		.map(
+			({ url, reason }) =>
+				`[rollup-plugin-import-cdn] Failed to fetch ${name} from ${url}: ${reason}`,
+		)
+		.join("\n");
+}
+
 export async function resolveDependency(
 	name: string,
 	options: PluginOptions,
@@ -112,7 +128,9 @@ export async function resolveDependency(
 	if (urls.length === 0) return null;
 
 	const { fetchImpl, cache } = options;
-	let httpError: Error | undefined;
+	const attempts: { url: string; reason: string }[] = [];
+	let sawHttpError = false;
+	let lastError: unknown;
 
 	for (const cdnUrl of urls) {
 		const cacheable = cache !== undefined && isPinnedUrl(cdnUrl);
@@ -124,9 +142,8 @@ export async function resolveDependency(
 		try {
 			const response = await fetchImpl(cdnUrl);
 			if (!response.ok) {
-				httpError = new Error(
-					`[rollup-plugin-import-cdn] Failed to fetch ${name} from ${cdnUrl}: HTTP ${response.status ?? "error"}`,
-				);
+				sawHttpError = true;
+				attempts.push({ url: cdnUrl, reason: `HTTP ${response.status ?? "error"}` });
 				continue;
 			}
 			const main = await response.text();
@@ -135,13 +152,20 @@ export async function resolveDependency(
 
 			return { name, url: response.url, main };
 		} catch (error) {
-			console.debug(`Error fetching ${name}`, error);
+			lastError = error;
+			attempts.push({ url: cdnUrl, reason: describeError(error) });
 		}
 	}
 
-	if (httpError) throw httpError;
+	const detail = formatAttempts(name, attempts);
+	if (sawHttpError) {
+		const error = new Error(detail);
+		// tsconfig targets ES2020, which lacks the ErrorOptions constructor overload.
+		if (lastError !== undefined) Object.assign(error, { cause: lastError });
+		throw error;
+	}
 
-	console.warn(`[rollup-plugin-import-cdn] Could not resolve dependency ${name}`);
+	console.warn(`[rollup-plugin-import-cdn] Could not resolve dependency ${name}\n${detail}`);
 
 	return null;
 }
@@ -153,7 +177,21 @@ export async function loadHook(key: string, options: PluginOptions) {
 	await init();
 
 	const { main } = dependency;
-	const [imports] = parse(main);
+	let imports: ReturnType<typeof parse>[0];
+	try {
+		[imports] = parse(main);
+	} catch (cause) {
+		const reason = cause instanceof Error ? cause.message : String(cause);
+		const hint = main.trimStart().startsWith("<")
+			? " (the CDN returned HTML rather than a JavaScript module)"
+			: "";
+		throw Object.assign(
+			new Error(
+				`[rollup-plugin-import-cdn] Could not parse ${dependency.name} from ${dependency.url}: ${reason}${hint}`,
+			),
+			{ cause },
+		);
+	}
 
 	const parts: string[] = [];
 	let last = 0;

@@ -191,9 +191,56 @@ describe("resolveDependency", () => {
 
 		expect(result).toBeNull();
 		expect(consoleSpy).toHaveBeenCalledWith(
-			"[rollup-plugin-import-cdn] Could not resolve dependency nonexistent",
+			"[rollup-plugin-import-cdn] Could not resolve dependency nonexistent\n" +
+				"[rollup-plugin-import-cdn] Failed to fetch nonexistent from https://cdn.skypack.dev/nonexistent: Not found: https://cdn.skypack.dev/nonexistent",
 		);
 		consoleSpy.mockRestore();
+	});
+
+	it("should warn with every URL and the underlying cause when all CDNs are unreachable", async () => {
+		const consoleSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+		const options: PluginOptions = {
+			fetchImpl: async (url) => {
+				throw Object.assign(new TypeError("fetch failed"), {
+					cause: new Error(`getaddrinfo ENOTFOUND ${new URL(url).host}`),
+				});
+			},
+			priority: [(key) => `https://a.test/${key}`, (key) => `https://b.test/${key}`],
+		};
+
+		const result = await resolveDependency("pkg", options);
+
+		expect(result).toBeNull();
+		expect(consoleSpy).toHaveBeenCalledWith(
+			[
+				"[rollup-plugin-import-cdn] Could not resolve dependency pkg",
+				"[rollup-plugin-import-cdn] Failed to fetch pkg from https://a.test/pkg: fetch failed (getaddrinfo ENOTFOUND a.test)",
+				"[rollup-plugin-import-cdn] Failed to fetch pkg from https://b.test/pkg: fetch failed (getaddrinfo ENOTFOUND b.test)",
+			].join("\n"),
+		);
+		consoleSpy.mockRestore();
+	});
+
+	it("should throw listing every attempt when HTTP and network failures mix", async () => {
+		const networkError = new Error("connect ECONNREFUSED");
+		const options: PluginOptions = {
+			fetchImpl: async (url) => {
+				if (url.startsWith("https://down.test")) throw networkError;
+				return { ok: false, status: 500, url, text: async () => "oops" };
+			},
+			priority: [(key) => `https://bad.test/${key}`, (key) => `https://down.test/${key}`],
+		};
+
+		const error = await resolveDependency("pkg", options).catch((e: unknown) => e);
+
+		expect(error).toBeInstanceOf(Error);
+		expect((error as Error).message).toBe(
+			[
+				"[rollup-plugin-import-cdn] Failed to fetch pkg from https://bad.test/pkg: HTTP 500",
+				"[rollup-plugin-import-cdn] Failed to fetch pkg from https://down.test/pkg: connect ECONNREFUSED",
+			].join("\n"),
+		);
+		expect((error as { cause?: unknown }).cause).toBe(networkError);
 	});
 });
 
@@ -389,6 +436,42 @@ export const combined = a + b;`;
 		expect(result).toContain('import "https://cdn.skypack.dev/m1999.js";');
 		expect(result).not.toContain('"./m');
 		expect(elapsed).toBeLessThan(500);
+	});
+
+	it("should name the module and URL when the CDN returns HTML", async () => {
+		const options: PluginOptions = {
+			fetchImpl: async () => ({
+				ok: true,
+				url: "https://portal.test/login",
+				text: async () =>
+					'<!doctype html><html><head><title>Sign in</title></head><body><a href="/x">Log in</a></body></html>',
+			}),
+		};
+
+		const error = await loadHook("portal", options).catch((e: unknown) => e);
+
+		expect(error).toBeInstanceOf(Error);
+		expect((error as Error).message).toMatch(
+			/^\[rollup-plugin-import-cdn\] Could not parse portal from https:\/\/portal\.test\/login: Parse error .*returned HTML rather than a JavaScript module/,
+		);
+		const { cause } = error as { cause?: unknown };
+		expect(cause).toBeInstanceOf(Error);
+		expect((cause as Error).message).toMatch(/^Parse error/);
+	});
+
+	it("should name the module and URL when the source has a syntax error", async () => {
+		const options: PluginOptions = {
+			fetchImpl: createMockFetch({
+				"https://cdn.skypack.dev/broken": "import { from 'x'",
+			}),
+		};
+
+		const error = await loadHook("broken", options).catch((e: unknown) => e);
+
+		expect((error as Error).message).toMatch(
+			/^\[rollup-plugin-import-cdn\] Could not parse broken from https:\/\/cdn\.skypack\.dev\/broken: Parse error/,
+		);
+		expect((error as Error).message).not.toContain("HTML");
 	});
 });
 

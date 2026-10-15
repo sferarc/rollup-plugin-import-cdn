@@ -31,7 +31,7 @@ The `brain/` directory is an Obsidian vault: persistent notes on how the plugin 
 
 ## Ground rules
 
-- Run `pnpm lint`, `pnpm exec lefthook validate`, `pnpm knip`, `pnpm typecheck`, `pnpm test`, `pnpm build` and `pnpm is-tree-shakable` before opening a pull request. CI requires `Check`, which runs all of them.
+- Run `pnpm check` before opening a pull request. It chains `pnpm lint`, `pnpm exec lefthook validate`, `pnpm knip`, `pnpm typecheck`, `pnpm test`, `pnpm build` and `pnpm is-tree-shakable`, the same steps CI's required `Check` job runs, and stops at the first failure.
 - Add a changeset (`pnpm changeset`) for any change that should be released.
 - No em or en dashes in prose. Commit subjects are imperative, with a conventional prefix.
 - Never publish, tag, bump the version or set `RELEASE_ENABLED`: releases are the owner's step (`brain/development/release.md`).
