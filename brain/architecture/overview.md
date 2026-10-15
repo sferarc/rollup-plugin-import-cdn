@@ -15,10 +15,10 @@ rollup-plugin-import-cdn lets Rollup import ESM packages and URLs from a CDN and
 
 `PluginOptions` in `src/types.ts`:
 
-- `fetchImpl`: optional. Defaults to the global `fetch`; `importCdn` throws if neither exists (`src/index.ts`, `src/index.test.ts`).
-- `priority`: CDNs to try in order, each `"skypack"` or a function from specifier to URL. Defaults to `["skypack"]`.
+- `fetchImpl`: optional. Defaults to the global `fetch`; `importCdn` throws if neither exists, telling the user to run on a Node version with global `fetch` or pass `fetchImpl` (`src/index.ts`, `src/index.test.ts`).
+- `priority`: CDNs to try in order, each a name from `availableCDNs` in `src/types.ts` (only `"skypack"`) or a function from specifier to URL. Defaults to `["skypack"]`. Since #31 `importCdn` throws at construction on any other entry, naming it, rather than failing on the first import (`src/index.test.ts`, "option validation").
 - `versions`: a map from package name or full specifier to version. The built-in `skypack` entry inserts it after the package name, and custom `priority` functions receive it as their second argument ([[resolution]]).
-- `cache`: optional directory. When set, a response for a URL containing an exact `@x.y.z` is stored as `<sha256 of the URL>.json` (`url` after redirects, and `main`) and read back instead of fetching; read and write failures fall back to a fetch (`src/load.ts`, `src/load.test.ts`).
+- `cache`: optional directory. When set, a response for a URL containing an exact `@x.y.z` is stored as `<sha256 of the URL>.json` (`url` after redirects, and `main`) and read back instead of fetching; read and write failures warn, except a missing entry, and fall back to a fetch ([[resolution]], `src/load.ts`, `src/load.test.ts`). An empty or non-string value throws at construction (#31).
 
 ## Things the code does not do
 
