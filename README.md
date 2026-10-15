@@ -101,10 +101,13 @@ For full documentation including configuration options, API reference, and examp
 The toolchain is pinned in `mise.toml`. With [mise](https://mise.jdx.dev) installed:
 
 ```bash
+mise trust    # once per clone: mise refuses an untrusted mise.toml
 mise install
 pnpm install
-pnpm lint && pnpm typecheck && pnpm test && pnpm build
+pnpm check
 ```
+
+`pnpm check` runs the same steps as CI's `Check` job, in the same order, and stops at the first failure: lint, hook config, knip, typecheck, test, build and the tree-shaking check.
 
 Add a changeset with `pnpm changeset` for any change that should be released.
 

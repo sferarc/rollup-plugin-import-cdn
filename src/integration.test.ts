@@ -1,6 +1,7 @@
 import { rollup } from "rollup";
 import { describe, expect, it, vi } from "vitest";
 import { importCdn } from "./index";
+import { hooks } from "./test-utils";
 import type { FetchImpl } from "./types";
 
 /**
@@ -34,7 +35,7 @@ export { default as throttle } from "./throttle.js";
 			fetchImpl: createMockCdn(cdnModules),
 		});
 
-		const load = plugin.load as (id: string) => Promise<string | undefined>;
+		const { load } = hooks(plugin);
 		const result = await load("lodash-es");
 
 		expect(result).toContain("https://cdn.skypack.dev/debounce.js");
@@ -55,7 +56,7 @@ export { jsx, jsxs };
 			versions: { react: "18.2.0" },
 		});
 
-		const load = plugin.load as (id: string) => Promise<string | undefined>;
+		const { load } = hooks(plugin);
 		const result = await load("react");
 
 		expect(result).toContain("https://cdn.skypack.dev/jsx-runtime.js");
@@ -74,8 +75,7 @@ export { useQuery } from "./build/lib/useQuery.js";
 			fetchImpl: createMockCdn(cdnModules),
 		});
 
-		const resolveId = plugin.resolveId as (id: string) => Promise<string | undefined>;
-		const load = plugin.load as (id: string) => Promise<string | undefined>;
+		const { resolveId, load } = hooks(plugin);
 
 		const resolved = await resolveId("@tanstack/react-query");
 		expect(resolved).toBe("@tanstack/react-query");
@@ -100,7 +100,7 @@ export async function loadModule(name) {
 			fetchImpl: createMockCdn(cdnModules),
 		});
 
-		const load = plugin.load as (id: string) => Promise<string | undefined>;
+		const { load } = hooks(plugin);
 		const result = await load("dynamic-loader");
 
 		// Dynamic imports with expressions should be preserved (not rewritten)
@@ -122,7 +122,7 @@ export const styled = (tag) => (styles) => {
 			fetchImpl: createMockCdn(cdnModules),
 		});
 
-		const load = plugin.load as (id: string) => Promise<string | undefined>;
+		const { load } = hooks(plugin);
 		const result = await load("styled-components");
 
 		// Absolute URL imports should be preserved
@@ -144,8 +144,7 @@ export const styled = (tag) => (styles) => {
 			priority: ["skypack", (key) => `https://esm.sh/${key}`],
 		});
 
-		const resolveId = plugin.resolveId as (id: string) => Promise<string | undefined>;
-		const load = plugin.load as (id: string) => Promise<string | undefined>;
+		const { resolveId, load } = hooks(plugin);
 
 		const resolved = await resolveId("rare-package");
 		expect(resolved).toBe("rare-package");
@@ -170,7 +169,7 @@ export { default as get } from "./get.js";
 			},
 		});
 
-		const load = plugin.load as (id: string) => Promise<string | undefined>;
+		const { load } = hooks(plugin);
 		const result = await load("lodash");
 
 		expect(result).toContain('VERSION = "4.17.21"');
@@ -189,8 +188,7 @@ export { default as get } from "./get.js";
 			fetchImpl: createMockCdn(cdnModules),
 		});
 
-		const resolveId = plugin.resolveId as (id: string) => Promise<string | undefined>;
-		const load = plugin.load as (id: string) => Promise<string | undefined>;
+		const { resolveId, load } = hooks(plugin);
 
 		const resolved = await resolveId(directUrl);
 		expect(resolved).toBe(directUrl);
@@ -209,8 +207,7 @@ export { default as get } from "./get.js";
 			fetchImpl: createMockCdn(cdnModules),
 		});
 
-		const resolveId = plugin.resolveId as (id: string) => Promise<string | undefined>;
-		const load = plugin.load as (id: string) => Promise<string | undefined>;
+		const { resolveId, load } = hooks(plugin);
 
 		const resolved = await resolveId(customUrl);
 		expect(resolved).toBe(customUrl);
@@ -232,7 +229,7 @@ export { default } from "./main.js";
 			fetchImpl: createMockCdn(cdnModules),
 		});
 
-		const load = plugin.load as (id: string) => Promise<string | undefined>;
+		const { load } = hooks(plugin);
 		const result = await load("my-lib");
 
 		expect(result).toContain("https://cdn.skypack.dev/core.js");
@@ -252,7 +249,7 @@ describe("Integration: Error handling", () => {
 			},
 		});
 
-		const resolveId = plugin.resolveId as (id: string) => Promise<string | undefined>;
+		const { resolveId } = hooks(plugin);
 		const result = await resolveId("failing-package");
 
 		expect(result).toBeUndefined();
@@ -267,7 +264,7 @@ describe("Integration: Error handling", () => {
 			fetchImpl: createMockCdn(cdnModules),
 		});
 
-		const load = plugin.load as (id: string) => Promise<string | undefined>;
+		const { load } = hooks(plugin);
 
 		// es-module-lexer throws a parse error on malformed content
 		await expect(load("malformed")).rejects.toThrow();
@@ -282,7 +279,7 @@ describe("Integration: Error handling", () => {
 			fetchImpl: createMockCdn(cdnModules),
 		});
 
-		const load = plugin.load as (id: string) => Promise<string | undefined>;
+		const { load } = hooks(plugin);
 		const result = await load("simple");
 
 		// Module with no imports should return unchanged

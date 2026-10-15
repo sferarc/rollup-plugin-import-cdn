@@ -1,4 +1,5 @@
-import { mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { mkdir, mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -190,9 +191,56 @@ describe("resolveDependency", () => {
 
 		expect(result).toBeNull();
 		expect(consoleSpy).toHaveBeenCalledWith(
-			"[rollup-plugin-import-cdn] Could not resolve dependency nonexistent",
+			"[rollup-plugin-import-cdn] Could not resolve dependency nonexistent\n" +
+				"[rollup-plugin-import-cdn] Failed to fetch nonexistent from https://cdn.skypack.dev/nonexistent: Not found: https://cdn.skypack.dev/nonexistent",
 		);
 		consoleSpy.mockRestore();
+	});
+
+	it("should warn with every URL and the underlying cause when all CDNs are unreachable", async () => {
+		const consoleSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+		const options: PluginOptions = {
+			fetchImpl: async (url) => {
+				throw Object.assign(new TypeError("fetch failed"), {
+					cause: new Error(`getaddrinfo ENOTFOUND ${new URL(url).host}`),
+				});
+			},
+			priority: [(key) => `https://a.test/${key}`, (key) => `https://b.test/${key}`],
+		};
+
+		const result = await resolveDependency("pkg", options);
+
+		expect(result).toBeNull();
+		expect(consoleSpy).toHaveBeenCalledWith(
+			[
+				"[rollup-plugin-import-cdn] Could not resolve dependency pkg",
+				"[rollup-plugin-import-cdn] Failed to fetch pkg from https://a.test/pkg: fetch failed (getaddrinfo ENOTFOUND a.test)",
+				"[rollup-plugin-import-cdn] Failed to fetch pkg from https://b.test/pkg: fetch failed (getaddrinfo ENOTFOUND b.test)",
+			].join("\n"),
+		);
+		consoleSpy.mockRestore();
+	});
+
+	it("should throw listing every attempt when HTTP and network failures mix", async () => {
+		const networkError = new Error("connect ECONNREFUSED");
+		const options: PluginOptions = {
+			fetchImpl: async (url) => {
+				if (url.startsWith("https://down.test")) throw networkError;
+				return { ok: false, status: 500, url, text: async () => "oops" };
+			},
+			priority: [(key) => `https://bad.test/${key}`, (key) => `https://down.test/${key}`],
+		};
+
+		const error = await resolveDependency("pkg", options).catch((e: unknown) => e);
+
+		expect(error).toBeInstanceOf(Error);
+		expect((error as Error).message).toBe(
+			[
+				"[rollup-plugin-import-cdn] Failed to fetch pkg from https://bad.test/pkg: HTTP 500",
+				"[rollup-plugin-import-cdn] Failed to fetch pkg from https://down.test/pkg: connect ECONNREFUSED",
+			].join("\n"),
+		);
+		expect((error as { cause?: unknown }).cause).toBe(networkError);
 	});
 });
 
@@ -389,6 +437,42 @@ export const combined = a + b;`;
 		expect(result).not.toContain('"./m');
 		expect(elapsed).toBeLessThan(500);
 	});
+
+	it("should name the module and URL when the CDN returns HTML", async () => {
+		const options: PluginOptions = {
+			fetchImpl: async () => ({
+				ok: true,
+				url: "https://portal.test/login",
+				text: async () =>
+					'<!doctype html><html><head><title>Sign in</title></head><body><a href="/x">Log in</a></body></html>',
+			}),
+		};
+
+		const error = await loadHook("portal", options).catch((e: unknown) => e);
+
+		expect(error).toBeInstanceOf(Error);
+		expect((error as Error).message).toMatch(
+			/^\[rollup-plugin-import-cdn\] Could not parse portal from https:\/\/portal\.test\/login: Parse error .*returned HTML rather than a JavaScript module/,
+		);
+		const { cause } = error as { cause?: unknown };
+		expect(cause).toBeInstanceOf(Error);
+		expect((cause as Error).message).toMatch(/^Parse error/);
+	});
+
+	it("should name the module and URL when the source has a syntax error", async () => {
+		const options: PluginOptions = {
+			fetchImpl: createMockFetch({
+				"https://cdn.skypack.dev/broken": "import { from 'x'",
+			}),
+		};
+
+		const error = await loadHook("broken", options).catch((e: unknown) => e);
+
+		expect((error as Error).message).toMatch(
+			/^\[rollup-plugin-import-cdn\] Could not parse broken from https:\/\/cdn\.skypack\.dev\/broken: Parse error/,
+		);
+		expect((error as Error).message).not.toContain("HTML");
+	});
 });
 
 describe("resolveDependency cache", () => {
@@ -489,16 +573,156 @@ describe("resolveDependency cache", () => {
 		expect(await readdir(cache)).toEqual([]);
 	});
 
-	it("should refetch when the cache entry is corrupt", async () => {
+	it("should resolve without output when the cache entry is missing", async () => {
+		const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+		const debug = vi.spyOn(console, "debug").mockImplementation(() => {});
+
+		await resolveDependency("https://esm.sh/react@18.2.0", { cache, fetchImpl: countingFetch([]) });
+
+		expect(warn).not.toHaveBeenCalled();
+		expect(debug).not.toHaveBeenCalled();
+		warn.mockRestore();
+		debug.mockRestore();
+	});
+
+	it("should warn once and refetch when the cache entry is not JSON", async () => {
 		const calls: string[] = [];
 		const options: PluginOptions = { cache, fetchImpl: countingFetch(calls) };
 		const pinned = "https://esm.sh/react@18.2.0";
 
 		await resolveDependency(pinned, options);
 		const [file] = await readdir(cache);
-		await writeFile(path.join(cache, file), "not json");
-		await resolveDependency(pinned, options);
+		await writeFile(path.join(cache, file), "{not json");
+		const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+		const dependency = await resolveDependency(pinned, options);
 
 		expect(calls).toHaveLength(2);
+		expect(dependency?.main).toBe(`export default "${pinned}";`);
+		expect(warn).toHaveBeenCalledOnce();
+		expect(warn.mock.calls[0][0]).toContain(path.join(cache, file));
+		expect(warn.mock.calls[0][0]).toContain(pinned);
+		warn.mockRestore();
+	});
+
+	it.each([
+		"pkg@1.2.3",
+		"@scope/pkg@1.2.3/sub.js",
+		"pkg@1.2.3-beta.1",
+		"pkg@1.2.3+build",
+		"pkg@1.2.3?dev",
+	])("should cache the pinned URL %s", async (specifier) => {
+		const calls: string[] = [];
+		const options: PluginOptions = { cache, fetchImpl: countingFetch(calls) };
+
+		await resolveDependency(`https://cdn.example/${specifier}`, options);
+		await resolveDependency(`https://cdn.example/${specifier}`, options);
+
+		expect(calls).toHaveLength(1);
+	});
+
+	it.each([
+		"pkg@1",
+		"pkg@1.2",
+		"pkg@^1.2.3",
+		"pkg@~1.2.3",
+		"pkg@latest",
+		"pkg@1.2.3.4",
+		"pkg@1.2.3x",
+		"pkg",
+		"pkg@latest?alias=dep@1.2.3",
+		"pkg#@1.2.3",
+	])("should not cache the unpinned URL %s", async (specifier) => {
+		const calls: string[] = [];
+		const options: PluginOptions = { cache, fetchImpl: countingFetch(calls) };
+
+		await resolveDependency(`https://cdn.example/${specifier}`, options);
+		await resolveDependency(`https://cdn.example/${specifier}`, options);
+
+		expect(calls).toHaveLength(2);
+		expect(await readdir(cache)).toEqual([]);
+	});
+
+	it.each([
+		["a non-http url", { url: "file:///etc/passwd", main: "export default 1;" }],
+		["a relative url", { url: "/react.js", main: "export default 1;" }],
+		["a missing url", { main: "export default 1;" }],
+		["a missing main", { url: "https://esm.sh/react@18.2.0" }],
+		["a non-string main", { url: "https://esm.sh/react@18.2.0", main: 1 }],
+		["null", null],
+	])("should refetch when the cache entry has %s", async (_, entry) => {
+		const calls: string[] = [];
+		const options: PluginOptions = { cache, fetchImpl: countingFetch(calls) };
+		const pinned = "https://esm.sh/react@18.2.0";
+
+		await resolveDependency(pinned, options);
+		const [file] = await readdir(cache);
+		await writeFile(path.join(cache, file), JSON.stringify(entry));
+		const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+		const dependency = await resolveDependency(pinned, options);
+
+		expect(calls).toHaveLength(2);
+		expect(dependency?.url).toBe(`${pinned}/resolved.js`);
+		expect(warn).toHaveBeenCalledOnce();
+		expect(warn.mock.calls[0][0]).toContain(path.join(cache, file));
+		warn.mockRestore();
+	});
+
+	it("should leave one valid entry when concurrent resolves write the same URL", async () => {
+		const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+		const calls: string[] = [];
+		const options: PluginOptions = { cache, fetchImpl: countingFetch(calls) };
+		const pinned = "https://esm.sh/react@18.2.0";
+
+		const results = await Promise.all(
+			Array.from({ length: 8 }, () => resolveDependency(pinned, { ...options })),
+		);
+
+		expect(results.every((result) => result?.url === `${pinned}/resolved.js`)).toBe(true);
+		expect(warn).not.toHaveBeenCalled();
+		const files = await readdir(cache);
+		expect(files).toHaveLength(1);
+		expect(files[0]).toMatch(/^[0-9a-f]{64}\.json$/);
+		const second = await resolveDependency(pinned, options);
+		expect(second?.main).toBe(`export default "${pinned}";`);
+		expect(calls).toHaveLength(8);
+		warn.mockRestore();
+	});
+
+	it("should warn and remove the temporary file when a cache write fails", async () => {
+		const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+		const pinned = "https://esm.sh/react@18.2.0";
+		const entry = `${createHash("sha256").update(pinned).digest("hex")}.json`;
+		await mkdir(path.join(cache, entry, "blocker"), { recursive: true });
+
+		const dependency = await resolveDependency(pinned, { cache, fetchImpl: countingFetch([]) });
+
+		expect(dependency?.url).toBe(`${pinned}/resolved.js`);
+		const messages = warn.mock.calls.map(([message]) => String(message));
+		expect(messages).toHaveLength(2);
+		expect(messages[0]).toContain(`Could not read cache entry ${path.join(cache, entry)}`);
+		expect(messages[1]).toContain(`Could not write cache entry ${path.join(cache, entry)}`);
+		expect(await readdir(cache)).toEqual([entry]);
+		warn.mockRestore();
+	});
+
+	it("should warn and leave no temporary file when the cache directory cannot be created", async () => {
+		const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+		const pinned = "https://esm.sh/react@18.2.0";
+		const blocker = path.join(cache, "not-a-directory");
+		await writeFile(blocker, "");
+		const dir = path.join(blocker, "cache");
+
+		const dependency = await resolveDependency(pinned, {
+			cache: dir,
+			fetchImpl: countingFetch([]),
+		});
+
+		expect(dependency?.url).toBe(`${pinned}/resolved.js`);
+		const write = warn.mock.calls
+			.map(([message]) => String(message))
+			.find((m) => m.includes("write"));
+		expect(write).toContain(dir);
+		expect(await readdir(cache)).toEqual(["not-a-directory"]);
+		warn.mockRestore();
 	});
 });
