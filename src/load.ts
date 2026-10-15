@@ -1,7 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
-import url from "node:url";
 // The minimal build keeps the v2 import record shape (`s`/`e` specifier offsets) that the
 // rewrite below relies on. The default entry point in es-module-lexer 3 reports tagged
 // records with renamed fields, so `s` and `e` read as undefined there and every import was
@@ -147,10 +146,12 @@ export async function resolveDependency(
 				continue;
 			}
 			const main = await response.text();
+			// Custom and mocked fetches can leave `url` empty; without a base the rewrite is a no-op.
+			const url = response.url || cdnUrl;
 
-			if (cacheable) await writeCache(cache, cdnUrl, { url: response.url, main });
+			if (cacheable) await writeCache(cache, cdnUrl, { url, main });
 
-			return { name, url: response.url, main };
+			return { name, url, main };
 		} catch (error) {
 			lastError = error;
 			attempts.push({ url: cdnUrl, reason: describeError(error) });
@@ -208,7 +209,7 @@ export async function loadHook(key: string, options: PluginOptions) {
 		const specifier = main.slice(s, e);
 		if (!isRelativeReference(specifier)) continue;
 
-		parts.push(main.slice(last, s), url.resolve(dependency.url, specifier));
+		parts.push(main.slice(last, s), new URL(specifier, dependency.url).href);
 		last = e;
 	}
 
