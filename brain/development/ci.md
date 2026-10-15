@@ -14,6 +14,8 @@
 8. `pnpm build`
 9. `pnpm is-tree-shakable`, because consumers rely on unused exports being dropped from their bundles.
 
+`pnpm check` in `package.json` chains steps 3 to 9 for local runs. The workflow keeps them as separate named steps so a failure names the failing check; change both together.
+
 Actions are pinned to full commit SHAs with the version in a trailing comment, which the sferarc organisation requires. Update both together.
 
 ## Branch rules on `main`

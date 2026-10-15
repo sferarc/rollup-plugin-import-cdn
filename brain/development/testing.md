@@ -8,6 +8,8 @@
 | `src/load.test.ts` | `resolveDependency` ([[architecture/resolution]]) and `loadHook` ([[architecture/import-rewriting]]) directly |
 | `src/integration.test.ts` | realistic module shapes against a mock CDN: scoped packages, dynamic imports, re-exports, fallback chains, network failures, malformed source |
 
+`src/index.test.ts` and `src/integration.test.ts` call hooks through `hooks(plugin)` from `src/test-utils.ts`, which unwraps the function or `{ handler }` form and calls it with Rollup's hook types and an empty context, so a hook signature change fails typecheck in the tests. Only test files import it, so it stays out of `dist` and knip sees it as used.
+
 Every test uses a mock `fetchImpl`; nothing touches the network. No test runs a real `rollup()` build, so how Rollup itself calls the hooks (entry points, importers) is untested.
 
 ## Related
