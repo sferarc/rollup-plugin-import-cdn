@@ -338,6 +338,24 @@ export const combined = a + b;`;
 		);
 	});
 
+	it("should resolve protocol-relative specifiers against the response URL's protocol", async () => {
+		const mockContent =
+			'import "//other.test/a.js";\nexport { b } from "//other.test/b.js";\nconst c = () => import("//other.test/c.js");';
+		const options: PluginOptions = {
+			fetchImpl: async (url) => ({
+				ok: true,
+				url: "http://mirror.test/-/pkg@1.0.0/index.js",
+				text: async () => (url === "https://cdn.skypack.dev/protocol" ? mockContent : ""),
+			}),
+		};
+
+		const result = await loadHook("protocol", options);
+
+		expect(result).toBe(
+			'import "http://other.test/a.js";\nexport { b } from "http://other.test/b.js";\nconst c = () => import("//other.test/c.js");',
+		);
+	});
+
 	it("should keep offsets intact around non-ASCII text", async () => {
 		const mockContent =
 			'const s = "héllo 🎉 日本";\nimport { a } from "./a.js";\nconst t = "ünï 🚀";\nimport { b } from "./b.js";\nexport const u = "ß 🌍";';

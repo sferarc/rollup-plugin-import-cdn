@@ -261,6 +261,62 @@ describe("importCdn", () => {
 			);
 		});
 
+		it("resolves a protocol-relative static import from a CDN module", async () => {
+			const plugin = importCdn({
+				fetchImpl: createMockFetch({
+					"https://cdn.test/pkg/index.js": 'export { x } from "//other.test/x.js";',
+					"https://other.test/x.js": "export const x = 1;",
+				}),
+				priority: [() => "https://cdn.test/pkg/index.js"],
+			});
+			const resolveId = plugin.resolveId as ResolveId;
+			const load = plugin.load as (id: string) => Promise<string | undefined>;
+
+			expect(await resolveId("pkg")).toBe("pkg");
+			const code = await load("pkg");
+			expect(code).toBe('export { x } from "https://other.test/x.js";');
+			expect(await resolveId("https://other.test/x.js", "pkg")).toBe("https://other.test/x.js");
+		});
+
+		it("resolves a protocol-relative dynamic import against the CDN module's URL", async () => {
+			const plugin = importCdn({
+				fetchImpl: createMockFetch({
+					"https://cdn.test/pkg/index.js": 'export const load = () => import("//other.test/x.js");',
+					"https://other.test/x.js": "export const x = 1;",
+				}),
+				priority: [() => "https://cdn.test/pkg/index.js"],
+			});
+			const resolveId = plugin.resolveId as ResolveId;
+
+			await resolveId("pkg");
+			expect(await resolveId("//other.test/x.js", "pkg")).toBe("https://other.test/x.js");
+		});
+
+		it("takes the protocol from the redirected importer URL", async () => {
+			const plugin = importCdn({
+				fetchImpl: async (url) => ({
+					ok: true,
+					url: url === "https://cdn.test/pkg" ? "http://mirror.test/pkg@1.0.0/index.js" : url,
+					text: async () => "export {};",
+				}),
+				priority: [() => "https://cdn.test/pkg"],
+			});
+			const resolveId = plugin.resolveId as ResolveId;
+
+			await resolveId("pkg");
+			expect(await resolveId("//other.test/x.js", "pkg")).toBe("http://other.test/x.js");
+		});
+
+		it("leaves a protocol-relative id from a local file to Rollup", async () => {
+			const fetchImpl = vi.fn(createMockFetch({}));
+			const plugin = importCdn({ fetchImpl });
+			const resolveId = plugin.resolveId as ResolveId;
+
+			expect(await resolveId("//other.test/x.js", "/abs/src/main.js")).toBeUndefined();
+			expect(await resolveId("//other.test/x.js")).toBeUndefined();
+			expect(fetchImpl).not.toHaveBeenCalled();
+		});
+
 		it("leaves relative imports from local files to Rollup", async () => {
 			const fetchImpl = vi.fn(createMockFetch({}));
 			const plugin = importCdn({ fetchImpl });

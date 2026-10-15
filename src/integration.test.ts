@@ -311,4 +311,33 @@ describe("Integration: Rollup build", () => {
 			"const chunk = 1;",
 		);
 	});
+
+	it("bundles protocol-relative imports from a CDN module", async () => {
+		const warn = vi.fn();
+		const bundle = await rollup({
+			input: "pkg",
+			onwarn: warn,
+			plugins: [
+				importCdn({
+					fetchImpl: createMockCdn({
+						"https://cdn.test/pkg/index.js": [
+							'export { dep } from "//other.test/dep.js";',
+							'export const load = () => import("//other.test/chunk.js");',
+						].join("\n"),
+						"https://other.test/dep.js": "export const dep = 2;",
+						"https://other.test/chunk.js": "export const chunk = 1;",
+					}),
+					priority: [() => "https://cdn.test/pkg/index.js"],
+				}),
+			],
+		});
+		const { output } = await bundle.generate({ format: "es" });
+		await bundle.close();
+
+		const code = output.map((chunk) => chunk.type === "chunk" && chunk.code).join("\n");
+		expect(code).toContain("const dep = 2;");
+		expect(code).toContain("const chunk = 1;");
+		expect(code).not.toContain("//other.test");
+		expect(warn).not.toHaveBeenCalled();
+	});
 });
