@@ -25,4 +25,4 @@ Read from `src/index.ts` and `src/load.ts` on 2026-10-15:
 
 - No cache across builds unless `cache` is set, and then only for versioned URLs. Within a build, the memo in `importCdn` fetches each URL once, so `resolveId` and `load` share one response, and `buildStart` clears it so the next build fetches again (`src/index.test.ts`: "fetches a module once for resolveId followed by load", "refetches after buildStart").
 - A non-OK response from one CDN moves on to the next. When no CDN succeeds and at least one answered non-OK, the build fails with an error listing every attempted URL with its HTTP status or network error; when every attempt was a network error, the plugin warns with the same list and leaves the id unresolved (`src/load.test.ts`).
-- `src/load.ts` imports `node:url`, so the plugin runs where Rollup runs on Node, not in a browser build of Rollup.
+- `src/load.ts` imports `node:crypto`, `node:fs/promises` and `node:path` for the on-disk cache, so the plugin runs where Rollup runs on Node, not in a browser build of Rollup. Specifiers resolve with the WHATWG `URL` global rather than `node:url`.

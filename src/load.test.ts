@@ -386,6 +386,20 @@ export const combined = a + b;`;
 		);
 	});
 
+	it("should resolve against the requested URL when the response URL is empty", async () => {
+		const options: PluginOptions = {
+			fetchImpl: async () => ({
+				ok: true,
+				url: "",
+				text: async () => 'import "./dep.js";',
+			}),
+		};
+
+		const result = await loadHook("https://cdn.test/pkg/index.js", options);
+
+		expect(result).toBe('import "https://cdn.test/pkg/dep.js";');
+	});
+
 	it("should resolve protocol-relative specifiers against the response URL's protocol", async () => {
 		const mockContent =
 			'import "//other.test/a.js";\nexport { b } from "//other.test/b.js";\nconst c = () => import("//other.test/c.js");';
