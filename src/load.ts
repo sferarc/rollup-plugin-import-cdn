@@ -11,7 +11,8 @@ import type { AvailableCDNs, Dependency, PluginOptions } from "./types";
 
 const isUrl = (value: string) => /^(http(s){0,1}:){0,1}\/\//.test(value);
 
-const isRelativeOrRootPath = (value: string) => /^\.{0,2}\//.test(value) && !isUrl(value);
+// `./x`, `../x`, `/x` or `//host/x`: anything that needs a base URL to fetch.
+export const isRelativeReference = (value: string) => /^\.{0,2}\//.test(value);
 
 // `name` is `pkg` or `@scope/pkg`; `subpath` is the rest, starting with `/` or, when the
 // specifier carries its own version, with `@`.
@@ -143,7 +144,7 @@ export async function loadHook(key: string, options: PluginOptions) {
 		if (d > -1) continue;
 
 		const specifier = main.slice(s, e);
-		if (!isRelativeOrRootPath(specifier)) continue;
+		if (!isRelativeReference(specifier)) continue;
 
 		parts.push(main.slice(last, s), url.resolve(dependency.url, specifier));
 		last = e;
