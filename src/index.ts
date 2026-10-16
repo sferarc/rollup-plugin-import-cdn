@@ -23,7 +23,9 @@ const isHttpUrl = (id: string) => /^https?:\/\//.test(id);
 const isKnownCdn = (value: unknown) =>
 	typeof value === "string" && (availableCDNs as readonly string[]).includes(value);
 
-function validateOptions({ priority, cache }: ImportCdnOptions) {
+const DEFAULT_TIMEOUT_MS = 30_000;
+
+function validateOptions({ priority, cache, timeout }: ImportCdnOptions) {
 	if (priority !== undefined) {
 		const entries: unknown[] = Array.isArray(priority) ? priority : [priority];
 		for (const entry of entries) {
@@ -38,6 +40,38 @@ function validateOptions({ priority, cache }: ImportCdnOptions) {
 			"[rollup-plugin-import-cdn] The cache option must be a non-empty directory path when set.",
 		);
 	}
+	if (
+		timeout !== undefined &&
+		(typeof timeout !== "number" || !Number.isFinite(timeout) || timeout < 0)
+	) {
+		throw new Error(
+			"[rollup-plugin-import-cdn] The timeout option must be a non-negative number of milliseconds (0 disables it).",
+		);
+	}
+}
+
+// Races the request so a fetchImpl that ignores `signal` still fails over to the next CDN.
+function withTimeout<T>(
+	url: string,
+	timeout: number,
+	request: (signal?: AbortSignal) => Promise<T>,
+): Promise<T> {
+	if (timeout === 0) return request();
+
+	const controller = new AbortController();
+	let timer: ReturnType<typeof setTimeout> | undefined;
+	const deadline = new Promise<never>((_, reject) => {
+		timer = setTimeout(() => {
+			const error = new Error(
+				`[rollup-plugin-import-cdn] Request to ${url} timed out after ${timeout}ms`,
+			);
+			controller.abort(error);
+			reject(error);
+		}, timeout);
+		timer.unref?.();
+	});
+
+	return Promise.race([request(controller.signal), deadline]).finally(() => clearTimeout(timer));
 }
 
 function contextLogger(context: PluginContext): Logger {
@@ -61,18 +95,24 @@ export function importCdn(pluginOptions: ImportCdnOptions = {}): RollupPlugin {
 		);
 	}
 
+	const timeout = pluginOptions.timeout ?? DEFAULT_TIMEOUT_MS;
+
 	// resolveId and load both resolve the same id, so each URL is fetched once per build.
+	// A failure, timeouts included, is kept too, so a hanging CDN costs one timeout per URL.
 	const responses = new Map<string, Promise<FetchedResponse>>();
 
 	const fetchImpl: FetchImpl = async (url) => {
 		let pending = responses.get(url);
 		if (!pending) {
-			pending = baseFetch(url).then(async (response) => ({
-				ok: response.ok,
-				status: response.status,
-				url: response.url,
-				body: response.ok ? await response.text() : "",
-			}));
+			pending = withTimeout(url, timeout, async (signal) => {
+				const response = await (signal ? baseFetch(url, { signal }) : baseFetch(url));
+				return {
+					ok: response.ok,
+					status: response.status,
+					url: response.url,
+					body: response.ok ? await response.text() : "",
+				};
+			});
 			responses.set(url, pending);
 		}
 		const { body, ...response } = await pending;
