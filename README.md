@@ -121,7 +121,7 @@ A custom function receives the specifier as written and, as its second argument,
 
 ## Documentation
 
-For full documentation including configuration options, API reference, and examples, see the [documentation](https://sferadev.com/docs/packages/rollup-plugin-import-cdn).
+This README is the reference for the plugin's options and behaviour. The [CHANGELOG](CHANGELOG.md) lists changes by release.
 
 ## Development
 

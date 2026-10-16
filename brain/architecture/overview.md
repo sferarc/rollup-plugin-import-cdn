@@ -24,9 +24,11 @@ rollup-plugin-import-cdn lets Rollup import ESM packages and URLs from a CDN and
 
 ## Things the code does not do
 
-Read from `src/index.ts` and `src/load.ts` on 2026-10-15:
+Read from `src/index.ts` and `src/load.ts` on 2026-10-16:
 
 - No cache across builds unless `cache` is set, and then only for versioned URLs. Within a build, the memo in `importCdn` fetches each URL once, so `resolveId` and `load` share one response (a rejection, timeouts included, is kept as well, so a hanging CDN costs one timeout per URL), and `buildStart` clears it so the next build fetches again (`src/index.test.ts`: "fetches a module once for resolveId followed by load", "refetches after buildStart").
 - A non-OK response from one CDN moves on to the next. When no CDN succeeds and at least one answered non-OK, the build fails with an error listing every attempted URL with its HTTP status or network error; when every attempt was a network error, the plugin emits a Rollup warning with the same list and leaves the id unresolved; each failed attempt is also logged through `this.debug` (`src/load.test.ts`, `src/rollup.test.ts`).
+- No fetch for ids that are not packages or URLs. `resolveId` and `load` return early for `\0` virtual ids, `node:` and builtin modules, and absolute POSIX or Windows paths (`isForeignId`, #14), and `resolveDependencyUrls` in `src/load.ts` returns no URLs for a local relative, root-relative or `file://` specifier; a relative specifier whose importer is a CDN module is the exception and resolves against that module's URL ([[resolution]]).
+- No rewriting of bare specifiers inside a CDN module. `loadHook` rewrites only static imports that need a base URL (`isRelativeReference`: `./`, `../`, `/`, `//`) and leaves bare ones as written, so they return through `resolveId` with the configured `versions` and `priority` (#15, [[import-rewriting]]). Dynamic imports are left as written too and resolved in `resolveId`.
 - Fetched code is only verified for URLs listed in `integrity`; anything else is bundled as the CDN served it.
 - `src/load.ts` imports `node:crypto`, `node:fs/promises` and `node:path` for the on-disk cache, so the plugin runs where Rollup runs on Node, not in a browser build of Rollup. Specifiers resolve with the WHATWG `URL` global rather than `node:url`.
