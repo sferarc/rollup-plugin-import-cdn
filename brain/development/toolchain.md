@@ -38,7 +38,7 @@ pnpm changeset         # describe a change for the next release
 
 ## TypeScript and style
 
-`tsconfig.json`: ES2020 target and lib, `module` ESNext, `moduleResolution` bundler, `strict`, `isolatedModules`. Relative imports carry no extension (`src/index.ts`). `biome.json`: tab indent, 100 columns, double quotes, the recommended preset with a few rules turned off.
+`tsconfig.json`: ES2020 target and lib, `module` ESNext, `moduleResolution` bundler, `strict`, `isolatedModules`, and since #36 `noUncheckedIndexedAccess`, `noPropertyAccessFromIndexSignature`, `noImplicitReturns`, `noImplicitOverride` and `noFallthroughCasesInSwitch`. Under `noUncheckedIndexedAccess` an array or record index reads as possibly `undefined`, which is why `src/integrity.ts` writes `hashes[0]!`. Relative imports carry no extension (`src/index.ts`). `biome.json`: tab indent, 100 columns, double quotes, the recommended preset with a few rules turned off.
 
 ## Dependencies
 

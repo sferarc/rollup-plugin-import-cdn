@@ -6,7 +6,7 @@ The README is the user documentation and stays the authority on the public API. 
 
 ## Architecture
 
-- [[architecture/index]]: the two Rollup hooks, how a specifier becomes a CDN URL, and how fetched code is rewritten
+- [[architecture/index]]: the three Rollup hooks, how a specifier becomes a CDN URL, and how fetched code is rewritten
 
 ## Development
 
