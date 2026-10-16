@@ -647,6 +647,7 @@ describe("resolveDependency cache", () => {
 		"@scope/pkg@1.2.3/sub.js",
 		"pkg@1.2.3-beta.1",
 		"pkg@1.2.3+build",
+		"pkg@1.2.3-rc.1+build.5/sub.js",
 		"pkg@1.2.3?dev",
 	])("should cache the pinned URL %s", async (specifier) => {
 		const calls: string[] = [];
@@ -666,6 +667,7 @@ describe("resolveDependency cache", () => {
 		"pkg@latest",
 		"pkg@1.2.3.4",
 		"pkg@1.2.3x",
+		"pkg@1.2.3+build+more",
 		"pkg",
 		"pkg@latest?alias=dep@1.2.3",
 		"pkg#@1.2.3",
