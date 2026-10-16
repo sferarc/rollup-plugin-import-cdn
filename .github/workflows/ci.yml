@@ -51,3 +51,28 @@ jobs:
       # Consumers rely on unused exports being dropped from their bundles.
       - name: Tree-shakable
         run: pnpm is-tree-shakable
+
+  # A separate job so the required Check name stays as it is.
+  min-node:
+    name: Test (minimum Node)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # package.json engines.node is the single source for the minimum.
+      - name: Minimum Node from engines
+        run: echo "MISE_NODE_VERSION=$(jq -r '.engines.node' package.json | sed 's/^>=//')" >> "$GITHUB_ENV"
+
+      # The action installs with --locked, which refuses a Node absent from mise.lock.
+      - uses: jdx/mise-action@08ae2a091c038e1e05ec6f5115dc5c69d5a2a6b8 # v5.1.2
+        with:
+          install: false
+
+      - run: mise install
+
+      - run: test "$(node --version)" = "v$MISE_NODE_VERSION"
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Test
+        run: pnpm test
