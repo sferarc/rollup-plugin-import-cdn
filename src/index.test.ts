@@ -70,6 +70,22 @@ describe("importCdn", () => {
 		it("rejects a non-string cache directory", () => {
 			expect(() => importCdn({ fetchImpl, cache: true as never })).toThrow("cache option");
 		});
+
+		it("rejects an invalid SRI value, naming its URL", () => {
+			expect(() =>
+				importCdn({ fetchImpl, integrity: { "https://esm.sh/react@18.2.0": "md5-abc" } }),
+			).toThrow(
+				'[rollup-plugin-import-cdn] Invalid integrity for https://esm.sh/react@18.2.0: "md5-abc" does not start with sha256-, sha384- or sha512-',
+			);
+		});
+
+		it.each([
+			["a non-string value", { "https://esm.sh/x": 1 }, "expected a string"],
+			["an array", [], "must be an object"],
+			["null", null, "must be an object"],
+		])("rejects %s for integrity", (_, integrity, message) => {
+			expect(() => importCdn({ fetchImpl, integrity: integrity as never })).toThrow(message);
+		});
 	});
 
 	it("should use global fetch when available", () => {

@@ -6,6 +6,7 @@ import path from "node:path";
 // records with renamed fields, so `s` and `e` read as undefined there and every import was
 // replaced with the whole module source.
 import { init, parse } from "es-module-lexer/minimal";
+import { hasIntegrity, verifyIntegrity } from "./integrity";
 import type { AvailableCDNs, Dependency, PluginOptions } from "./types";
 
 const isUrl = (value: string) => /^(http(s){0,1}:){0,1}\/\//.test(value);
@@ -126,7 +127,7 @@ export async function resolveDependency(
 	const urls = resolveDependencyUrls(name, options);
 	if (urls.length === 0) return null;
 
-	const { fetchImpl, cache } = options;
+	const { fetchImpl, cache, integrity } = options;
 	const attempts: { url: string; reason: string }[] = [];
 	let sawHttpError = false;
 	let lastError: unknown;
@@ -135,9 +136,20 @@ export async function resolveDependency(
 		const cacheable = cache !== undefined && isPinnedUrl(cdnUrl);
 		if (cacheable) {
 			const cached = await readCache(cache, cdnUrl);
-			if (cached) return { name, ...cached };
+			// The cached `url` is the base for relative imports and is not covered by the hash of
+			// `main`, so a checked URL only trusts it when it is unchanged or has an entry of its own.
+			if (
+				cached &&
+				(cached.url === cdnUrl ||
+					!hasIntegrity(cdnUrl, integrity) ||
+					hasIntegrity(cached.url, integrity))
+			) {
+				verifyIntegrity([cdnUrl, cached.url], cached.main, integrity);
+				return { name, ...cached };
+			}
 		}
 
+		let fetched: Pick<Dependency, "url" | "main">;
 		try {
 			const response = await fetchImpl(cdnUrl);
 			if (!response.ok) {
@@ -147,15 +159,18 @@ export async function resolveDependency(
 			}
 			const main = await response.text();
 			// Custom and mocked fetches can leave `url` empty; without a base the rewrite is a no-op.
-			const url = response.url || cdnUrl;
-
-			if (cacheable) await writeCache(cache, cdnUrl, { url, main });
-
-			return { name, url, main };
+			fetched = { url: response.url || cdnUrl, main };
 		} catch (error) {
 			lastError = error;
 			attempts.push({ url: cdnUrl, reason: describeError(error) });
+			continue;
 		}
+
+		// Outside the try: a mismatch means tampered content, so it fails rather than trying the next CDN.
+		verifyIntegrity([cdnUrl, fetched.url], fetched.main, integrity);
+		if (cacheable) await writeCache(cache, cdnUrl, fetched);
+
+		return { name, ...fetched };
 	}
 
 	const detail = formatAttempts(name, attempts);

@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -143,5 +144,29 @@ describe("Rollup build", () => {
 		const { message } = error as Error;
 		expect(message).toContain("https://cdn.skypack.dev/missing: HTTP 404");
 		expect(message).toContain("https://mirror.test/missing: HTTP 404");
+	});
+
+	const integrityFor = (body: string) => ({
+		[DIRECT]: `sha384-${createHash("sha384").update(body).digest("base64")}`,
+	});
+
+	it("builds when a URL's body matches its integrity entry", async () => {
+		const { fetchImpl } = mockCdn();
+		await writeFile(entry, `import { direct } from "${DIRECT}";\nconsole.log(direct);`);
+		const integrity = integrityFor('export const direct = "DIRECT";');
+
+		const code = await build({ input: entry, plugins: [importCdn({ fetchImpl, integrity })] });
+
+		expect(code).toContain('"DIRECT"');
+	});
+
+	it("fails the build when a URL's body does not match its integrity entry", async () => {
+		const { fetchImpl } = mockCdn();
+		await writeFile(entry, `import { direct } from "${DIRECT}";\nconsole.log(direct);`);
+		const integrity = integrityFor("export const direct = 1;");
+
+		await expect(
+			rollup({ input: entry, plugins: [importCdn({ fetchImpl, integrity })] }),
+		).rejects.toThrow(`Integrity check failed for ${DIRECT}: expected ${integrity[DIRECT]}`);
 	});
 });
