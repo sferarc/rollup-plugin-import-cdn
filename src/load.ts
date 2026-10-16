@@ -49,7 +49,7 @@ function pinnedVersion(key: string, versions: PluginOptions["versions"]) {
 // Only the path names the package version; a query or fragment can carry any text.
 function isPinnedUrl(value: string) {
 	if (!URL.canParse(value)) return false;
-	return /@\d+\.\d+\.\d+(?:[-+][\w.-]+)?(?=\/|$)/.test(new URL(value).pathname);
+	return /@\d+\.\d+\.\d+(?:-[\w.-]+)?(?:\+[\w.-]+)?(?=\/|$)/.test(new URL(value).pathname);
 }
 
 const isHttpUrl = (value: unknown): value is string =>
