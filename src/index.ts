@@ -1,7 +1,7 @@
 import { builtinModules } from "node:module";
 import path from "node:path";
-import type { Plugin as RollupPlugin } from "rollup";
-import { isRelativeReference, loadHook, resolveDependency } from "./load";
+import type { PluginContext, Plugin as RollupPlugin } from "rollup";
+import { isRelativeReference, type Logger, loadHook, resolveDependency } from "./load";
 import { availableCDNs, type FetchImpl, type PluginOptions } from "./types";
 
 type ImportCdnOptions = Omit<PluginOptions, "fetchImpl"> &
@@ -74,6 +74,16 @@ function withTimeout<T>(
 	return Promise.race([request(controller.signal), deadline]).finally(() => clearTimeout(timer));
 }
 
+function contextLogger(context: PluginContext): Logger {
+	return {
+		warn: (message) => context.warn(message),
+		// Rollup added `this.debug` in 3.25; earlier 3.x peers drop debug messages.
+		debug: (message) => {
+			if (typeof context.debug === "function") context.debug(message);
+		},
+	};
+}
+
 export function importCdn(pluginOptions: ImportCdnOptions = {}): RollupPlugin {
 	validateOptions(pluginOptions);
 
@@ -133,14 +143,14 @@ export function importCdn(pluginOptions: ImportCdnOptions = {}): RollupPlugin {
 				return;
 			}
 
-			const dependency = await resolveDependency(key, options);
+			const dependency = await resolveDependency(key, options, contextLogger(this));
 			if (!dependency) return;
 			moduleUrls.set(dependency.name, dependency.url);
 			return dependency.name;
 		},
 		async load(key: string) {
 			if (isForeignId(key)) return;
-			return loadHook(key, options);
+			return loadHook(key, options, contextLogger(this));
 		},
 	};
 }
