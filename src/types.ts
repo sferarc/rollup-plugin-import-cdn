@@ -4,8 +4,13 @@ export type AvailableCDNs = (typeof availableCDNs)[number];
 
 export type FetchImpl = (
 	url: string,
-	/** Never passed by the plugin; kept for compatibility with `fetch`. */
-	init?: { body?: string; headers?: Record<string, string>; method?: string },
+	/** The plugin passes only `signal`, aborted when `timeout` expires. */
+	init?: {
+		body?: string;
+		headers?: Record<string, string>;
+		method?: string;
+		signal?: AbortSignal;
+	},
 ) => Promise<{
 	ok: boolean;
 	status?: number;
@@ -20,6 +25,8 @@ export interface PluginOptions {
 	fetchImpl: FetchImpl;
 	/** CDNs tried in order until one succeeds, default `["skypack"]`; a function gets the specifier and its `versions` entry. */
 	priority?: Array<AvailableCDNs | ((key: string, version?: string) => string)>;
+	/** Milliseconds each request, body included, may take before it fails and the next CDN is tried; default 30000, `0` disables. */
+	timeout?: number;
 	/** Versions keyed by exact specifier, falling back to the package name for subpath imports unless the specifier carries its own version. */
 	versions?: Record<string, string>;
 }
