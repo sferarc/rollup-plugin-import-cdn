@@ -772,3 +772,135 @@ describe("resolveDependency cache", () => {
 		expect(await readdir(cache)).toEqual(["not-a-directory"]);
 	});
 });
+
+describe("resolveDependency integrity", () => {
+	const pinned = "https://esm.sh/react@18.2.0";
+	const final = `${pinned}/es2022/react.mjs`;
+	const body = "export default 1;";
+	const sri = (content: string) =>
+		`sha384-${createHash("sha384").update(content).digest("base64")}`;
+
+	const servingFetch =
+		(calls: string[], content = body): FetchImpl =>
+		async (url) => {
+			calls.push(url);
+			return { ok: true, url: url === pinned ? final : url, text: async () => content };
+		};
+
+	it.each([
+		["requested", pinned],
+		["final", final],
+	])("should resolve when the body matches the hash keyed by the %s URL", async (_, key) => {
+		const dependency = await resolveDependency(pinned, {
+			fetchImpl: servingFetch([]),
+			integrity: { [key]: sri(body) },
+		});
+
+		expect(dependency).toEqual({ name: pinned, url: final, main: body });
+	});
+
+	it("should throw on a mismatch instead of trying the next CDN", async () => {
+		const calls: string[] = [];
+		const options: PluginOptions = {
+			fetchImpl: servingFetch(calls, "export default 'tampered';"),
+			integrity: { [pinned]: sri(body) },
+			priority: [() => pinned, () => "https://cdn.skypack.dev/react@18.2.0"],
+		};
+
+		await expect(resolveDependency("react", options)).rejects.toThrow(
+			`Integrity check failed for ${pinned}: expected ${sri(body)}, got ${sri("export default 'tampered';")}`,
+		);
+		expect(calls).toEqual([pinned]);
+	});
+
+	it("should leave URLs without an entry unchecked", async () => {
+		const dependency = await resolveDependency(pinned, {
+			fetchImpl: servingFetch([]),
+			integrity: { "https://esm.sh/other@1.0.0": sri("other") },
+		});
+
+		expect(dependency?.main).toBe(body);
+	});
+
+	describe("with a cache", () => {
+		let cache: string;
+
+		beforeEach(async () => {
+			cache = await mkdtemp(path.join(tmpdir(), "import-cdn-integrity-"));
+		});
+
+		afterEach(async () => {
+			await rm(cache, { recursive: true, force: true });
+		});
+
+		it("should not cache a body that fails the check", async () => {
+			const options: PluginOptions = {
+				cache,
+				fetchImpl: servingFetch([], "export default 'tampered';"),
+				integrity: { [pinned]: sri(body) },
+			};
+
+			await expect(resolveDependency(pinned, options)).rejects.toThrow("Integrity check failed");
+			expect(await readdir(cache)).toEqual([]);
+		});
+
+		it("should use a cache entry that matches without refetching", async () => {
+			const calls: string[] = [];
+			const options: PluginOptions = {
+				cache,
+				fetchImpl: servingFetch(calls),
+				integrity: { [pinned]: sri(body), [final]: sri(body) },
+			};
+
+			await resolveDependency(pinned, options);
+			const dependency = await resolveDependency(pinned, options);
+
+			expect(dependency?.main).toBe(body);
+			expect(calls).toEqual([pinned]);
+		});
+
+		it("should refetch when a cache entry for a checked URL points its imports elsewhere", async () => {
+			const calls: string[] = [];
+			const options: PluginOptions = {
+				cache,
+				fetchImpl: servingFetch(calls),
+				integrity: { [pinned]: sri(body) },
+			};
+
+			await resolveDependency(pinned, options);
+			const [file] = await readdir(cache);
+			await writeFile(
+				path.join(cache, file!),
+				JSON.stringify({ url: "https://attacker.test/main.js", main: body }),
+			);
+			const dependency = await resolveDependency(pinned, options);
+
+			expect(dependency?.url).toBe(final);
+			expect(calls).toEqual([pinned, pinned]);
+		});
+
+		it.each([
+			["requested", pinned],
+			["final", final],
+		])("should fail on a tampered cache entry checked by the %s URL", async (_, key) => {
+			const calls: string[] = [];
+			const options: PluginOptions = {
+				cache,
+				fetchImpl: servingFetch(calls),
+				integrity: { [key]: sri(body) },
+			};
+
+			await resolveDependency(pinned, options);
+			const [file] = await readdir(cache);
+			await writeFile(
+				path.join(cache, file!),
+				JSON.stringify({ url: key, main: "export default 'tampered';" }),
+			);
+
+			await expect(resolveDependency(pinned, options)).rejects.toThrow(
+				`Integrity check failed for ${key}`,
+			);
+			expect(calls).toEqual([pinned]);
+		});
+	});
+});

@@ -1,6 +1,7 @@
 import { builtinModules } from "node:module";
 import path from "node:path";
 import type { PluginContext, Plugin as RollupPlugin } from "rollup";
+import { parseIntegrity } from "./integrity";
 import { isRelativeReference, type Logger, loadHook, resolveDependency } from "./load";
 import { availableCDNs, type FetchImpl, type PluginOptions } from "./types";
 
@@ -25,7 +26,7 @@ const isKnownCdn = (value: unknown) =>
 
 const DEFAULT_TIMEOUT_MS = 30_000;
 
-function validateOptions({ priority, cache, timeout }: ImportCdnOptions) {
+function validateOptions({ priority, cache, integrity, timeout }: ImportCdnOptions) {
 	if (priority !== undefined) {
 		const entries: unknown[] = Array.isArray(priority) ? priority : [priority];
 		for (const entry of entries) {
@@ -39,6 +40,23 @@ function validateOptions({ priority, cache, timeout }: ImportCdnOptions) {
 		throw new Error(
 			"[rollup-plugin-import-cdn] The cache option must be a non-empty directory path when set.",
 		);
+	}
+	if (integrity !== undefined) {
+		if (typeof integrity !== "object" || integrity === null || Array.isArray(integrity)) {
+			throw new Error(
+				"[rollup-plugin-import-cdn] The integrity option must be an object mapping URLs to SRI hashes.",
+			);
+		}
+		for (const [url, value] of Object.entries(integrity)) {
+			try {
+				if (typeof value !== "string") throw new Error("expected a string");
+				parseIntegrity(value);
+			} catch (error) {
+				throw new Error(
+					`[rollup-plugin-import-cdn] Invalid integrity for ${url}: ${(error as Error).message}`,
+				);
+			}
+		}
 	}
 	if (
 		timeout !== undefined &&

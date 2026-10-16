@@ -43,6 +43,7 @@ import confetti from "https://esm.sh/canvas-confetti";
 | --- | --- | --- |
 | `cache` | none | Directory for an on-disk cache of responses from pinned URLs. See [Fetch Cache](#fetch-cache). |
 | `fetchImpl` | global `fetch` | Function used for every request: `(url, { signal }) => Promise<{ ok, status, url, text() }>`; `signal` is passed only while `timeout` is enabled. `importCdn` throws `No fetch implementation found` when it is not set and no global `fetch` exists. |
+| `integrity` | none | SRI hashes that fetched code must match, keyed by URL. See [Integrity](#integrity). |
 | `priority` | `["skypack"]` | CDNs to try, in order. Each entry is `"skypack"` or a function returning a URL; any other entry throws when the plugin is created. See [Custom CDN](#custom-cdn). |
 | `timeout` | `30000` | Milliseconds each request may take, reading the body included, before it counts as a network error and the next CDN is tried. A failed or timed-out URL is not retried until the next build. `0` disables it. The plugin aborts the `signal` it passes to `fetchImpl` and stops waiting even if `fetchImpl` ignores it. |
 | `versions` | none | Versions to pin, keyed by package name or full specifier. See [Version Pinning](#version-pinning). |
@@ -72,6 +73,29 @@ importCdn({
 ```
 
 With `cache` set, responses for URLs pinned to an exact version (`pkg@1.2.3`) are stored in that directory and reused by later builds. Unpinned URLs are always fetched. The check is on the URL path, so a custom `priority` function must put `@x.y.z` in the path for its responses to be cached; a version passed as a query parameter is not enough.
+
+### Integrity
+
+```js
+importCdn({
+  versions: { lodash: "4.17.21" },
+  integrity: {
+    "https://cdn.skypack.dev/lodash@4.17.21": "sha384-<base64 digest>",
+  },
+});
+```
+
+Each entry maps a URL to a [Subresource Integrity](https://developer.mozilla.org/en-US/docs/Web/Security/Subresource_Integrity) value: `sha256-`, `sha384-` or `sha512-` followed by the base64 digest of the module source. The key can be the URL the plugin requests or the URL the CDN redirects to. When the fetched source does not match, the build fails with the URL and the expected and actual digests; the plugin does not fall back to the next CDN. Several space-separated hashes are accepted, and as in browsers only those using the strongest listed algorithm count, any one of them matching. URLs without an entry are not checked, and an invalid value throws when the plugin is created.
+
+Compute a hash from the exact URL the plugin fetches:
+
+```sh
+curl -sL https://cdn.skypack.dev/lodash@4.17.21 | openssl dgst -sha384 -binary | openssl base64 -A
+```
+
+The hash covers the module text as `fetchImpl`'s `text()` returns it, encoded as UTF-8. For a UTF-8 module without a byte order mark that is the file as served, so the command above gives the right value.
+
+Entries from the [fetch cache](#fetch-cache) are checked too, so a modified cache file fails the build instead of being bundled. A cache file also records the URL the module was served from, which relative imports inside it resolve against. For a requested URL with an entry, that recorded URL is only trusted when it equals the requested URL or has an entry of its own; otherwise the module is fetched again. So when the requested URL redirects, list the final URL as well to keep it cached. A cache file can name any final URL, so with `cache` set, key entries by the requested URL: an entry keyed only by the final URL is checked on every fetch but not on a cache read.
 
 ### Custom CDN
 
