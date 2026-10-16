@@ -88,7 +88,7 @@ A custom function receives the specifier as written and, as its second argument,
 ## Behaviour
 
 - **Fallback.** Each CDN in `priority` is tried in turn. A non-OK response or a network error moves on to the next one.
-- **Failures.** If no CDN succeeds and at least one answered with a non-OK status, the build fails with one line per attempted URL and its status or error, for example `Failed to fetch lodash-es from https://cdn.skypack.dev/lodash-es: HTTP 404`. If every attempt failed with a network error, the plugin logs a warning with the same lines and leaves the import for Rollup to handle.
+- **Failures.** If no CDN succeeds and at least one answered with a non-OK status, the build fails with one line per attempted URL and its status or error, for example `Failed to fetch lodash-es from https://cdn.skypack.dev/lodash-es: HTTP 404`. If every attempt failed with a network error, the plugin emits a Rollup warning with the same lines and leaves the import for Rollup to handle. Each failed attempt is also logged at debug level, visible with `logLevel: "debug"`.
 - **Transitive imports.** Relative, root-relative and protocol-relative static imports inside a CDN module are rewritten to absolute URLs, resolved against the URL the module was served from. Bare imports are left as written and go back through the plugin, so `versions` and `priority` apply to transitive dependencies too.
 - **Dynamic imports.** A relative `import("./chunk.js")` inside a CDN module is resolved against the URL the module was served from, after redirects.
 

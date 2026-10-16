@@ -132,8 +132,6 @@ export const styled = (tag) => (styles) => {
 	});
 
 	it("should support fallback CDN chain", async () => {
-		vi.spyOn(console, "debug").mockImplementation(() => {});
-
 		const cdnModules = {
 			// Only available on esm.sh, not skypack
 			"https://esm.sh/rare-package": 'export const rare = "found on esm.sh";',
@@ -240,19 +238,20 @@ export { default } from "./main.js";
 
 describe("Integration: Error handling", () => {
 	it("should handle network failures gracefully", async () => {
-		vi.spyOn(console, "debug").mockImplementation(() => {});
-		vi.spyOn(console, "warn").mockImplementation(() => {});
-
 		const plugin = importCdn({
 			fetchImpl: async () => {
 				throw new Error("Network error");
 			},
 		});
 
-		const { resolveId } = hooks(plugin);
+		const { resolveId, logs } = hooks(plugin);
 		const result = await resolveId("failing-package");
 
 		expect(result).toBeUndefined();
+		expect(logs.debug).toEqual([
+			"Failed to fetch failing-package from https://cdn.skypack.dev/failing-package: Network error",
+		]);
+		expect(logs.warn[0]).toMatch(/^Could not resolve dependency failing-package\n/);
 	});
 
 	it("should handle malformed module content", async () => {

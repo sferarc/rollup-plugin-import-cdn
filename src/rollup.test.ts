@@ -1,7 +1,7 @@
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { type RollupOptions, rollup } from "rollup";
+import { type LogLevel, type RollupLog, type RollupOptions, rollup } from "rollup";
 import { afterEach, beforeEach, describe, expect, it, type MockInstance, vi } from "vitest";
 import { importCdn } from "./index";
 import type { FetchImpl } from "./types";
@@ -126,6 +126,43 @@ describe("Rollup build", () => {
 
 		expect(second).toBe(first);
 		expect(Object.values(fetchCounts())).toEqual([2, 2, 2, 2, 2]);
+	});
+
+	it("reports CDN network errors through Rollup's log handlers", async () => {
+		await writeFile(entry, 'import { x } from "offline";\nconsole.log(x);');
+		const logs: { level: LogLevel; log: RollupLog }[] = [];
+
+		const bundle = await rollup({
+			input: entry,
+			logLevel: "debug",
+			onLog: (level, log) => {
+				logs.push({ level, log });
+			},
+			plugins: [
+				importCdn({
+					fetchImpl: async () => {
+						throw new Error("ECONNREFUSED");
+					},
+					priority: ["skypack", (key) => `https://mirror.test/${key}`],
+				}),
+			],
+		});
+		await bundle.close();
+
+		const fromPlugin = logs.filter(({ log }) => log.plugin === "plugin-import-cdn");
+		const debug = fromPlugin.filter(({ level }) => level === "debug").map(({ log }) => log.message);
+		expect(debug).toEqual([
+			expect.stringContaining(
+				"Failed to fetch offline from https://cdn.skypack.dev/offline: ECONNREFUSED",
+			),
+			expect.stringContaining(
+				"Failed to fetch offline from https://mirror.test/offline: ECONNREFUSED",
+			),
+		]);
+		const warnings = fromPlugin.filter(({ level }) => level === "warn");
+		expect(warnings).toHaveLength(1);
+		expect(warnings[0]?.log.code).toBe("PLUGIN_WARNING");
+		expect(warnings[0]?.log.message).toContain("Could not resolve dependency offline");
 	});
 
 	it("fails the build with every attempted URL when all CDNs return 404", async () => {
