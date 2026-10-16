@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { importCdn } from "./index";
-import { hooks } from "./test-utils";
+import { fakeContext, hooks } from "./test-utils";
 import type { FetchImpl } from "./types";
 
 const createMockFetch = (responses: Record<string, string>): FetchImpl => {
@@ -143,17 +143,34 @@ describe("importCdn", () => {
 			expect(await resolveId("../parent")).toBeUndefined();
 		});
 
-		it("should return undefined for unresolvable packages", async () => {
-			vi.spyOn(console, "warn").mockImplementation(() => {});
-
+		it("should return undefined and warn through Rollup for unresolvable packages", async () => {
+			const warn = vi.spyOn(console, "warn");
 			const plugin = importCdn({
 				fetchImpl: createMockFetch({}),
 			});
 
-			const { resolveId } = hooks(plugin);
+			const { resolveId, logs } = hooks(plugin);
 			const result = await resolveId("nonexistent");
 
 			expect(result).toBeUndefined();
+			expect(logs.warn).toHaveLength(1);
+			expect(logs.warn[0]).toMatch(/^Could not resolve dependency nonexistent\n/);
+			expect(logs.debug).toEqual([
+				"Failed to fetch nonexistent from https://cdn.skypack.dev/nonexistent: Not found: https://cdn.skypack.dev/nonexistent",
+			]);
+			expect(warn).not.toHaveBeenCalled();
+		});
+
+		it("should drop debug messages on a Rollup without this.debug", async () => {
+			const plugin = importCdn({
+				fetchImpl: createMockFetch({}),
+			});
+
+			const { resolveId, logs } = hooks(plugin, fakeContext({ withDebug: false }));
+
+			expect(await resolveId("nonexistent")).toBeUndefined();
+			expect(logs.warn).toHaveLength(1);
+			expect(logs.debug).toEqual([]);
 		});
 	});
 
@@ -246,6 +263,100 @@ describe("importCdn", () => {
 			await load("memo");
 
 			expect(fetchImpl).toHaveBeenCalledTimes(2);
+		});
+	});
+
+	describe("request timeout", () => {
+		const hangingUrl = "https://hang.example/slow";
+		const workingUrl = "https://ok.example/slow";
+		const priority = [() => hangingUrl, () => workingUrl];
+
+		const hangingFirst = (onHang?: (init?: Parameters<FetchImpl>[1]) => void) =>
+			vi.fn<FetchImpl>(async (url, init) => {
+				if (url === hangingUrl) {
+					onHang?.(init);
+					return new Promise(() => {});
+				}
+				return { ok: true, url, text: async () => "export const slow = 1;" };
+			});
+
+		it("fails over to the next CDN when a request hangs", async () => {
+			const fetchImpl = hangingFirst();
+			const { resolveId, load } = hooks(importCdn({ fetchImpl, priority, timeout: 20 }));
+
+			const started = Date.now();
+			expect(await resolveId("slow")).toBe("slow");
+			expect(Date.now() - started).toBeLessThan(1000);
+			expect(await load("slow")).toBe("export const slow = 1;");
+		});
+
+		it("aborts the signal it passes to fetchImpl", async () => {
+			let signal: AbortSignal | undefined;
+			const fetchImpl = hangingFirst((init) => {
+				signal = init?.signal;
+			});
+			const { resolveId } = hooks(importCdn({ fetchImpl, priority, timeout: 20 }));
+
+			await resolveId("slow");
+
+			expect(signal?.aborted).toBe(true);
+			expect(String(signal?.reason)).toContain(`${hangingUrl} timed out after 20ms`);
+		});
+
+		it("covers reading the body", async () => {
+			const fetchImpl = vi.fn<FetchImpl>(async (url) =>
+				url === hangingUrl
+					? { ok: true, url, text: () => new Promise<string>(() => {}) }
+					: { ok: true, url, text: async () => "export const slow = 1;" },
+			);
+			const { resolveId, load } = hooks(importCdn({ fetchImpl, priority, timeout: 20 }));
+
+			expect(await resolveId("slow")).toBe("slow");
+			expect(await load("slow")).toBe("export const slow = 1;");
+		});
+
+		it("uses a 30 second default", async () => {
+			vi.useFakeTimers();
+			try {
+				const fetchImpl = hangingFirst();
+				const { resolveId } = hooks(importCdn({ fetchImpl, priority }));
+
+				const result = resolveId("slow");
+				await vi.advanceTimersByTimeAsync(29_999);
+				expect(fetchImpl).toHaveBeenCalledTimes(1);
+				await vi.advanceTimersByTimeAsync(1);
+
+				expect(await result).toBe("slow");
+				expect(fetchImpl).toHaveBeenCalledTimes(2);
+			} finally {
+				vi.useRealTimers();
+			}
+		});
+
+		it("passes no init and sets no timer when timeout is 0", async () => {
+			vi.useFakeTimers();
+			try {
+				const fetchImpl = vi.fn(
+					createMockFetch({ "https://cdn.skypack.dev/memo": "export const memo = 1;" }),
+				);
+				const { resolveId } = hooks(importCdn({ fetchImpl, timeout: 0 }));
+
+				expect(await resolveId("memo")).toBe("memo");
+				expect(fetchImpl).toHaveBeenCalledWith("https://cdn.skypack.dev/memo");
+				expect(vi.getTimerCount()).toBe(0);
+			} finally {
+				vi.useRealTimers();
+			}
+		});
+
+		it.each([-1, Number.NaN, Number.POSITIVE_INFINITY, "1000"])("rejects timeout %s", (timeout) => {
+			expect(() =>
+				importCdn({
+					fetchImpl: createMockFetch({}),
+					// @ts-expect-error - checking runtime validation of untyped input
+					timeout,
+				}),
+			).toThrow("The timeout option must be a non-negative number");
 		});
 	});
 

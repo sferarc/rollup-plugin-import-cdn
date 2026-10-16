@@ -9,6 +9,14 @@ import { init, parse } from "es-module-lexer/minimal";
 import { hasIntegrity, verifyIntegrity } from "./integrity";
 import type { AvailableCDNs, Dependency, PluginOptions } from "./types";
 
+// The plugin wires these to Rollup's `this.warn` and `this.debug`; omitted, messages are dropped.
+export interface Logger {
+	warn(message: string): void;
+	debug(message: string): void;
+}
+
+const silent: Logger = { warn: () => {}, debug: () => {} };
+
 const isUrl = (value: string) => /^(http(s){0,1}:){0,1}\/\//.test(value);
 
 // `./x`, `../x`, `/x` or `//host/x`: anything that needs a base URL to fetch.
@@ -52,15 +60,14 @@ const cacheFile = (dir: string, cdnUrl: string) =>
 
 const errorMessage = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
-function warnCache(action: string, file: string, cdnUrl: string, reason: string) {
-	console.warn(
-		`[rollup-plugin-import-cdn] Could not ${action} cache entry ${file} for ${cdnUrl}: ${reason}`,
-	);
+function warnCache(logger: Logger, action: string, file: string, cdnUrl: string, reason: string) {
+	logger.warn(`Could not ${action} cache entry ${file} for ${cdnUrl}: ${reason}`);
 }
 
 async function readCache(
 	dir: string,
 	cdnUrl: string,
+	logger: Logger,
 ): Promise<Pick<Dependency, "url" | "main"> | null> {
 	const file = cacheFile(dir, cdnUrl);
 	let entry: unknown;
@@ -68,17 +75,22 @@ async function readCache(
 		entry = JSON.parse(await readFile(file, "utf8"));
 	} catch (error) {
 		if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
-			warnCache("read", file, cdnUrl, errorMessage(error));
+			warnCache(logger, "read", file, cdnUrl, errorMessage(error));
 		}
 		return null;
 	}
 	const { url, main } = (entry ?? {}) as Record<string, unknown>;
 	if (isHttpUrl(url) && typeof main === "string") return { url, main };
-	warnCache("read", file, cdnUrl, "expected an http(s) `url` and a string `main`");
+	warnCache(logger, "read", file, cdnUrl, "expected an http(s) `url` and a string `main`");
 	return null;
 }
 
-async function writeCache(dir: string, cdnUrl: string, entry: Pick<Dependency, "url" | "main">) {
+async function writeCache(
+	dir: string,
+	cdnUrl: string,
+	entry: Pick<Dependency, "url" | "main">,
+	logger: Logger,
+) {
 	const file = cacheFile(dir, cdnUrl);
 	const temporary = `${file}.${process.pid}.${randomUUID()}.tmp`;
 	try {
@@ -87,7 +99,7 @@ async function writeCache(dir: string, cdnUrl: string, entry: Pick<Dependency, "
 		await rename(temporary, file);
 	} catch (error) {
 		await rm(temporary, { force: true }).catch(() => {});
-		warnCache("write", file, cdnUrl, errorMessage(error));
+		warnCache(logger, "write", file, cdnUrl, errorMessage(error));
 	}
 }
 
@@ -123,6 +135,7 @@ function formatAttempts(name: string, attempts: { url: string; reason: string }[
 export async function resolveDependency(
 	name: string,
 	options: PluginOptions,
+	logger: Logger = silent,
 ): Promise<Dependency | null> {
 	const urls = resolveDependencyUrls(name, options);
 	if (urls.length === 0) return null;
@@ -131,11 +144,15 @@ export async function resolveDependency(
 	const attempts: { url: string; reason: string }[] = [];
 	let sawHttpError = false;
 	let lastError: unknown;
+	const fail = (url: string, reason: string) => {
+		attempts.push({ url, reason });
+		logger.debug(`Failed to fetch ${name} from ${url}: ${reason}`);
+	};
 
 	for (const cdnUrl of urls) {
 		const cacheable = cache !== undefined && isPinnedUrl(cdnUrl);
 		if (cacheable) {
-			const cached = await readCache(cache, cdnUrl);
+			const cached = await readCache(cache, cdnUrl, logger);
 			// The cached `url` is the base for relative imports and is not covered by the hash of
 			// `main`, so a checked URL only trusts it when it is unchanged or has an entry of its own.
 			if (
@@ -154,7 +171,7 @@ export async function resolveDependency(
 			const response = await fetchImpl(cdnUrl);
 			if (!response.ok) {
 				sawHttpError = true;
-				attempts.push({ url: cdnUrl, reason: `HTTP ${response.status ?? "error"}` });
+				fail(cdnUrl, `HTTP ${response.status ?? "error"}`);
 				continue;
 			}
 			const main = await response.text();
@@ -162,13 +179,13 @@ export async function resolveDependency(
 			fetched = { url: response.url || cdnUrl, main };
 		} catch (error) {
 			lastError = error;
-			attempts.push({ url: cdnUrl, reason: describeError(error) });
+			fail(cdnUrl, describeError(error));
 			continue;
 		}
 
 		// Outside the try: a mismatch means tampered content, so it fails rather than trying the next CDN.
 		verifyIntegrity([cdnUrl, fetched.url], fetched.main, integrity);
-		if (cacheable) await writeCache(cache, cdnUrl, fetched);
+		if (cacheable) await writeCache(cache, cdnUrl, fetched, logger);
 
 		return { name, ...fetched };
 	}
@@ -181,13 +198,13 @@ export async function resolveDependency(
 		throw error;
 	}
 
-	console.warn(`[rollup-plugin-import-cdn] Could not resolve dependency ${name}\n${detail}`);
+	logger.warn(`Could not resolve dependency ${name}\n${detail}`);
 
 	return null;
 }
 
-export async function loadHook(key: string, options: PluginOptions) {
-	const dependency = await resolveDependency(key, options);
+export async function loadHook(key: string, options: PluginOptions, logger: Logger = silent) {
+	const dependency = await resolveDependency(key, options, logger);
 	if (!dependency) return;
 
 	await init();

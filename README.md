@@ -42,9 +42,10 @@ import confetti from "https://esm.sh/canvas-confetti";
 | Option | Default | Description |
 | --- | --- | --- |
 | `cache` | none | Directory for an on-disk cache of responses from pinned URLs. See [Fetch Cache](#fetch-cache). |
-| `fetchImpl` | global `fetch` | Function used for every request: `(url) => Promise<{ ok, status, url, text() }>`. `importCdn` throws `No fetch implementation found` when it is not set and no global `fetch` exists. |
+| `fetchImpl` | global `fetch` | Function used for every request: `(url, { signal }) => Promise<{ ok, status, url, text() }>`; `signal` is passed only while `timeout` is enabled. `importCdn` throws `No fetch implementation found` when it is not set and no global `fetch` exists. |
 | `integrity` | none | SRI hashes that fetched code must match, keyed by URL. See [Integrity](#integrity). |
 | `priority` | `["skypack"]` | CDNs to try, in order. Each entry is `"skypack"` or a function returning a URL; any other entry throws when the plugin is created. See [Custom CDN](#custom-cdn). |
+| `timeout` | `30000` | Milliseconds each request may take, reading the body included, before it counts as a network error and the next CDN is tried. A failed or timed-out URL is not retried until the next build. `0` disables it. The plugin aborts the `signal` it passes to `fetchImpl` and stops waiting even if `fetchImpl` ignores it. |
 | `versions` | none | Versions to pin, keyed by package name or full specifier. See [Version Pinning](#version-pinning). |
 
 ### Version Pinning
@@ -111,8 +112,8 @@ A custom function receives the specifier as written and, as its second argument,
 
 ## Behaviour
 
-- **Fallback.** Each CDN in `priority` is tried in turn. A non-OK response or a network error moves on to the next one.
-- **Failures.** If no CDN succeeds and at least one answered with a non-OK status, the build fails with one line per attempted URL and its status or error, for example `Failed to fetch lodash-es from https://cdn.skypack.dev/lodash-es: HTTP 404`. If every attempt failed with a network error, the plugin logs a warning with the same lines and leaves the import for Rollup to handle.
+- **Fallback.** Each CDN in `priority` is tried in turn. A non-OK response, a network error or a request that exceeds `timeout` moves on to the next one.
+- **Failures.** If no CDN succeeds and at least one answered with a non-OK status, the build fails with one line per attempted URL and its status or error, for example `Failed to fetch lodash-es from https://cdn.skypack.dev/lodash-es: HTTP 404`. If every attempt failed with a network error, the plugin emits a Rollup warning with the same lines and leaves the import for Rollup to handle. Each failed attempt is also logged at debug level, visible with `logLevel: "debug"`.
 - **Transitive imports.** Relative, root-relative and protocol-relative static imports inside a CDN module are rewritten to absolute URLs, resolved against the URL the module was served from. Bare imports are left as written and go back through the plugin, so `versions` and `priority` apply to transitive dependencies too.
 - **Dynamic imports.** A relative `import("./chunk.js")` inside a CDN module is resolved against the URL the module was served from, after redirects.
 
