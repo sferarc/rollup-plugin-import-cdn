@@ -97,6 +97,26 @@ describe("Rollup build", () => {
 		expect(code).not.toMatch(/\bimport\b|https?:\/\//);
 	});
 
+	it("leaves a cwd-relative entry path to Rollup instead of fetching it", async () => {
+		const { fetchImpl, fetchCounts } = mockCdn();
+		// `input: "src/index.js"`, as in the README: relative to cwd, with no leading `./`.
+		const local = await mkdtemp(path.join(process.cwd(), "import-cdn-entry-"));
+		try {
+			await writeFile(
+				path.join(local, "index.js"),
+				`import { direct } from "${DIRECT}";\nconsole.log(direct);`,
+			);
+			const input = path.relative(process.cwd(), path.join(local, "index.js"));
+
+			const code = await build({ input, plugins: [importCdn({ fetchImpl })] });
+
+			expect(code).toContain('"DIRECT"');
+			expect(fetchCounts()).toEqual({ [DIRECT]: 1 });
+		} finally {
+			await rm(local, { recursive: true, force: true });
+		}
+	});
+
 	it("tree-shakes an unused export of a CDN module", async () => {
 		const { fetchImpl } = mockCdn();
 		const code = await build({ input: entry, plugins: [importCdn({ fetchImpl })] });

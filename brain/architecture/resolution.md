@@ -16,7 +16,7 @@ For the remaining keys, `resolveDependencyUrls` in `src/load.ts` decides, in thi
 2. A specifier matching `^(http(s)?:)?//` is a URL and is fetched as is. Protocol-relative `//host/...` never gets here, since rule 1 claims it first; it is only fetched after `resolveId` resolves it against a CDN importer.
 3. Anything else is a package name. Each entry of `priority` (default `["skypack"]`) yields one URL: `"skypack"` gives `https://cdn.skypack.dev/<key>`, and a function gives `fn(key, version)`.
 
-Outside the importer case above, a path without a leading `./` is treated as a package name.
+Outside the importer case above, a path without a leading `./` is treated as a package name, with one exception: an entry (no importer) that is not an `http(s)` URL and names a file relative to cwd, as is or with `.mjs` or `.js` added (the extensions Rollup's default resolver tries), is left to Rollup without a fetch (`isLocalEntry` in `src/index.ts`, `src/rollup.test.ts` "leaves a cwd-relative entry path to Rollup instead of fetching it"). Before this, the README's own `input: "src/index.js"` was requested from `https://cdn.skypack.dev/src/index.js` and the build failed with HTTP 404.
 
 ## Version pinning
 
