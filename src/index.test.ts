@@ -51,9 +51,15 @@ describe("importCdn", () => {
 			expect(() => importCdn({ fetchImpl, priority: [42 as never] })).toThrow('Unknown CDN "42"');
 		});
 
-		it("rejects a priority that is not an array", () => {
-			expect(() => importCdn({ fetchImpl, priority: "skypak" as never })).toThrow(
-				'Unknown CDN "skypak"',
+		// A known name or a function on its own used to pass and fail at the first import
+		// with "priorities.map is not a function".
+		it.each([
+			["a misspelt name", "skypak"],
+			["a known name", "skypack"],
+			["a function", (key: string) => `https://esm.sh/${key}`],
+		])("rejects a priority that is not an array: %s", (_, priority) => {
+			expect(() => importCdn({ fetchImpl, priority: priority as never })).toThrow(
+				"[rollup-plugin-import-cdn] The priority option must be an array of CDN names or functions (key) => url.",
 			);
 		});
 
