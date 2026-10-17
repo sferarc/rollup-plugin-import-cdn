@@ -1,3 +1,4 @@
+import { statSync } from "node:fs";
 import { builtinModules } from "node:module";
 import path from "node:path";
 import type { PluginContext, Plugin as RollupPlugin } from "rollup";
@@ -20,6 +21,12 @@ const isForeignId = (id: string) =>
 	path.win32.isAbsolute(id);
 
 const isHttpUrl = (id: string) => /^https?:\/\//.test(id);
+
+// Rollup's default resolver accepts an entry with or without these extensions.
+const isLocalEntry = (id: string) =>
+	[id, `${id}.mjs`, `${id}.js`].some((candidate) =>
+		statSync(path.resolve(candidate), { throwIfNoEntry: false })?.isFile(),
+	);
 
 const isKnownCdn = (value: unknown) =>
 	typeof value === "string" && (availableCDNs as readonly string[]).includes(value);
@@ -163,6 +170,9 @@ export function importCdn(pluginOptions: ImportCdnOptions = {}): RollupPlugin {
 			if (importerUrl && isRelativeReference(key)) {
 				key = new URL(key, importerUrl).href;
 			} else if (isForeignId(key)) {
+				return;
+			} else if (importer === undefined && !isHttpUrl(key) && isLocalEntry(key)) {
+				// An entry such as `input: "src/index.js"` is a path relative to cwd, not a package.
 				return;
 			}
 
