@@ -28,8 +28,13 @@ const DEFAULT_TIMEOUT_MS = 30_000;
 
 function validateOptions({ priority, cache, integrity, timeout }: ImportCdnOptions) {
 	if (priority !== undefined) {
-		const entries: unknown[] = Array.isArray(priority) ? priority : [priority];
-		for (const entry of entries) {
+		// resolveDependencyUrls maps over it, so a lone name or function would fail at the first import.
+		if (!Array.isArray(priority)) {
+			throw new Error(
+				"[rollup-plugin-import-cdn] The priority option must be an array of CDN names or functions (key) => url.",
+			);
+		}
+		for (const entry of priority as unknown[]) {
 			if (typeof entry === "function" || isKnownCdn(entry)) continue;
 			throw new Error(
 				`[rollup-plugin-import-cdn] Unknown CDN "${String(entry)}" in priority; expected one of: ${availableCDNs.join(", ")}, or a function (key) => url`,
