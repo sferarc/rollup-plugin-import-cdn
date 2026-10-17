@@ -86,6 +86,10 @@ describe("resolveDependency", () => {
 		["@scope/pkg/sub/deep.js", { "@scope/pkg": "1.0.0" }, "@scope/pkg@1.0.0/sub/deep.js"],
 		["react-dom/client", { react: "18.2.0" }, "react-dom/client"],
 		["react-dom@18/client", { "react-dom": "18.2.0" }, "react-dom@18/client"],
+		// Inherited names such as `constructor` are not entries in `versions`.
+		["constructor", { lodash: "4.17.21" }, "constructor"],
+		["constructor/sub", { lodash: "4.17.21" }, "constructor/sub"],
+		["constructor", { constructor: "1.0.0" }, "constructor@1.0.0"],
 	])("should place the version for %s after the package name (%j)", async (key, versions, path) => {
 		const options: PluginOptions = {
 			fetchImpl: createMockFetch({ [`https://cdn.skypack.dev/${path}`]: "export {};" }),
@@ -106,6 +110,19 @@ describe("resolveDependency", () => {
 		await resolveDependency("react-dom/client", options);
 
 		expect(priority).toHaveBeenCalledWith("react-dom/client", "18.2.0");
+	});
+
+	it("should not pass an inherited name in versions to a custom CDN resolver", async () => {
+		const priority = vi.fn((key: string) => `https://esm.sh/${key}`);
+		const options: PluginOptions = {
+			fetchImpl: createMockFetch({ "https://esm.sh/toString": "export {};" }),
+			priority: [priority],
+			versions: { lodash: "4.17.21" },
+		};
+
+		await resolveDependency("toString", options);
+
+		expect(priority).toHaveBeenCalledWith("toString", undefined);
 	});
 
 	it("should resolve direct URL imports", async () => {

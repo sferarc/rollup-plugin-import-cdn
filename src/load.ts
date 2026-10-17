@@ -40,10 +40,12 @@ const parseCDN: Record<AvailableCDNs, (key: string, version?: string) => string>
 };
 
 function pinnedVersion(key: string, versions: PluginOptions["versions"]) {
-	const exact = versions?.[key];
+	// A Map keeps inherited names such as `constructor` from reading as entries.
+	const entries = new Map(Object.entries(versions ?? {}));
+	const exact = entries.get(key);
 	if (exact) return exact;
 	const { name, subpath } = splitSpecifier(key);
-	return subpath.startsWith("@") ? undefined : versions?.[name];
+	return subpath.startsWith("@") ? undefined : entries.get(name);
 }
 
 // Only the path names the package version; a query or fragment can carry any text.
