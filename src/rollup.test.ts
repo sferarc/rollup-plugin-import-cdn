@@ -138,6 +138,21 @@ describe("Rollup build", () => {
 		expect(fetchCounts()).toEqual({});
 	});
 
+	it("leaves a #subpath import to the plugin listed after it", async () => {
+		const { fetchImpl, fetchCounts } = mockCdn();
+		await writeFile(entry, 'import { greeting } from "#greeting";\nconsole.log(greeting);');
+		const imports: Plugin = {
+			name: "subpath-imports",
+			resolveId: (id) => (id === "#greeting" ? "\0greeting" : undefined),
+			load: (id) => (id === "\0greeting" ? 'export const greeting = "SUBPATH";' : undefined),
+		};
+
+		const code = await build({ input: entry, plugins: [importCdn({ fetchImpl }), imports] });
+
+		expect(code).toContain('"SUBPATH"');
+		expect(fetchCounts()).toEqual({});
+	});
+
 	it("points import.meta.url in a CDN module at the URL it was served from", async () => {
 		const { fetchImpl } = mockCdn();
 		await writeFile(

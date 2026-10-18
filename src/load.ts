@@ -112,13 +112,14 @@ function resolveDependencyUrls(key: string, options: PluginOptions): string[] {
 
 	const priorities = options.priority ?? ["skypack"];
 	const version = pinnedVersion(key, options.versions);
-	// An npm name has no `:`, so `virtual:x` or `data:...` belongs to another plugin, not a
-	// built-in CDN. A custom function still sees it and may map a scheme such as `npm:` itself.
-	const hasScheme = /^[a-z][a-z\d+.-]*:/i.test(key);
+	// An npm name has no `:` and does not start with `#`, so `virtual:x`, `data:...` or a
+	// package.json `imports` key such as `#internal` belongs to another plugin, not a built-in
+	// CDN. A custom function still sees it and may map a scheme such as `npm:` itself.
+	const notPackageName = /^[a-z][a-z\d+.-]*:/i.test(key) || key.startsWith("#");
 
 	return priorities.flatMap((cdn) => {
 		if (typeof cdn !== "string") return [cdn(key, version)];
-		return hasScheme ? [] : [parseCDN[cdn](key, version)];
+		return notPackageName ? [] : [parseCDN[cdn](key, version)];
 	});
 }
 
