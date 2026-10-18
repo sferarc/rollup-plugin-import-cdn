@@ -185,6 +185,13 @@ export function importCdn(pluginOptions: ImportCdnOptions = {}): RollupPlugin {
 			if (isForeignId(key)) return;
 			return loadHook(key, options, contextLogger(this));
 		},
+		// Bundled, `import.meta.url` would name the output chunk, so `new URL("./x.wasm",
+		// import.meta.url)` inside a CDN module would point at a local file instead of the CDN.
+		resolveImportMeta(property, { moduleId }) {
+			const url = moduleUrls.get(moduleId);
+			if (property !== "url" || url === undefined) return;
+			return JSON.stringify(url);
+		},
 	};
 }
 
