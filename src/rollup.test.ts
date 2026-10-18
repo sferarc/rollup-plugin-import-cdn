@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { type LogLevel, type RollupLog, type RollupOptions, rollup } from "rollup";
+import { type LogLevel, type Plugin, type RollupLog, type RollupOptions, rollup } from "rollup";
 import { afterEach, beforeEach, describe, expect, it, type MockInstance, vi } from "vitest";
 import { importCdn } from "./index";
 import type { FetchImpl } from "./types";
@@ -115,6 +115,21 @@ describe("Rollup build", () => {
 		} finally {
 			await rm(local, { recursive: true, force: true });
 		}
+	});
+
+	it("leaves a virtual: module to the plugin listed after it", async () => {
+		const { fetchImpl, fetchCounts } = mockCdn();
+		await writeFile(entry, 'import { greeting } from "virtual:greeting";\nconsole.log(greeting);');
+		const virtual: Plugin = {
+			name: "virtual-greeting",
+			resolveId: (id) => (id === "virtual:greeting" ? id : undefined),
+			load: (id) => (id === "virtual:greeting" ? 'export const greeting = "VIRTUAL";' : undefined),
+		};
+
+		const code = await build({ input: entry, plugins: [importCdn({ fetchImpl }), virtual] });
+
+		expect(code).toContain('"VIRTUAL"');
+		expect(fetchCounts()).toEqual({});
 	});
 
 	it("tree-shakes an unused export of a CDN module", async () => {
