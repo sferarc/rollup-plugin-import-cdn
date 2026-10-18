@@ -13,6 +13,8 @@ const HELPER = "https://cdn.skypack.dev/-/pkg-a@1.0.0/dist/helper.js";
 const SHARED = "https://cdn.skypack.dev/-/shared@1.0.0/index.js";
 const PKG_B = "https://cdn.skypack.dev/pkg-b";
 const DIRECT = "https://esm.test/direct.js";
+const PKG_WASM = "https://cdn.skypack.dev/pkg-wasm";
+const PKG_WASM_REDIRECT = "https://cdn.skypack.dev/-/pkg-wasm@1.0.0/dist/index.js";
 
 // pkg-a redirects to a pinned path, so its relative and root-relative imports resolve against it.
 const cdn: Record<string, { url?: string; body: string }> = {
@@ -32,6 +34,10 @@ const cdn: Record<string, { url?: string; body: string }> = {
 	[SHARED]: { body: 'export const shared = "SHARED";' },
 	[PKG_B]: { body: 'export const b = "PKG_B";' },
 	[DIRECT]: { body: 'export const direct = "DIRECT";' },
+	[PKG_WASM]: {
+		url: PKG_WASM_REDIRECT,
+		body: 'export const wasm = new URL("./mod.wasm", import.meta.url).href;',
+	},
 };
 
 function mockCdn() {
@@ -130,6 +136,24 @@ describe("Rollup build", () => {
 
 		expect(code).toContain('"VIRTUAL"');
 		expect(fetchCounts()).toEqual({});
+	});
+
+	it("points import.meta.url in a CDN module at the URL it was served from", async () => {
+		const { fetchImpl } = mockCdn();
+		await writeFile(
+			entry,
+			[
+				'import { wasm } from "pkg-wasm";',
+				`import { direct } from "${DIRECT}";`,
+				"console.log(wasm, direct, import.meta.url);",
+			].join("\n"),
+		);
+
+		const code = await build({ input: entry, plugins: [importCdn({ fetchImpl })] });
+
+		expect(code).toContain(`new URL("./mod.wasm", "${PKG_WASM_REDIRECT}")`);
+		// The local entry keeps its own import.meta.url.
+		expect(code).toContain("console.log(wasm, direct, import.meta.url)");
 	});
 
 	it("tree-shakes an unused export of a CDN module", async () => {
