@@ -212,7 +212,10 @@ export async function resolveDependency(
 export async function loadHook(key: string, options: PluginOptions, logger: Logger = silent) {
 	const dependency = await resolveDependency(key, options, logger);
 	if (!dependency) return;
+	return rewriteImports(dependency);
+}
 
+export async function rewriteImports(dependency: Dependency) {
 	await init();
 
 	const { main } = dependency;
