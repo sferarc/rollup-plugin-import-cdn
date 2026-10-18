@@ -3,7 +3,7 @@ import { builtinModules } from "node:module";
 import path from "node:path";
 import type { PluginContext, Plugin as RollupPlugin } from "rollup";
 import { parseIntegrity } from "./integrity";
-import { isRelativeReference, type Logger, loadHook, resolveDependency } from "./load";
+import { isRelativeReference, type Logger, resolveDependency, rewriteImports } from "./load";
 import { availableCDNs, type FetchImpl, type PluginOptions } from "./types";
 
 type ImportCdnOptions = Omit<PluginOptions, "fetchImpl"> &
@@ -183,7 +183,11 @@ export function importCdn(pluginOptions: ImportCdnOptions = {}): RollupPlugin {
 		},
 		async load(key: string) {
 			if (isForeignId(key)) return;
-			return loadHook(key, options, contextLogger(this));
+			const dependency = await resolveDependency(key, options, contextLogger(this));
+			if (!dependency) return;
+			// A rebuild from Rollup's cache reuses resolved ids and skips resolveId, but not load.
+			moduleUrls.set(key, dependency.url);
+			return rewriteImports(dependency);
 		},
 		// Bundled, `import.meta.url` would name the output chunk, so `new URL("./x.wasm",
 		// import.meta.url)` inside a CDN module would point at a local file instead of the CDN.

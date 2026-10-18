@@ -156,6 +156,20 @@ describe("Rollup build", () => {
 		expect(code).toContain("console.log(wasm, direct, import.meta.url)");
 	});
 
+	it("keeps import.meta.url at the served URL on a rebuild from Rollup's cache", async () => {
+		const { fetchImpl } = mockCdn();
+		await writeFile(entry, 'import { wasm } from "pkg-wasm";\nconsole.log(wasm);');
+		const plugin = importCdn({ fetchImpl });
+
+		// Watch mode does this: one plugin instance, and the previous build's cache, so Rollup
+		// reuses the resolved ids of unchanged modules and skips resolveId for them.
+		const first = await rollup({ input: entry, plugins: [plugin] });
+		await first.close();
+		const code = await build({ input: entry, plugins: [plugin], cache: first.cache });
+
+		expect(code).toContain(`new URL("./mod.wasm", "${PKG_WASM_REDIRECT}")`);
+	});
+
 	it("tree-shakes an unused export of a CDN module", async () => {
 		const { fetchImpl } = mockCdn();
 		const code = await build({ input: entry, plugins: [importCdn({ fetchImpl })] });
