@@ -36,6 +36,29 @@ describe("resolveDependency", () => {
 		expect(await resolveDependency("file://path", options)).toBeNull();
 	});
 
+	it.each(["virtual:greeting", "data:text/javascript,export{}", "HTTPS://esm.test/x.js"])(
+		"should not request %s from skypack, which only serves npm names",
+		async (key) => {
+			const fetchImpl = vi.fn(createMockFetch({}));
+			const logger = spyLogger();
+
+			expect(await resolveDependency(key, { fetchImpl }, logger)).toBeNull();
+			expect(fetchImpl).not.toHaveBeenCalled();
+			expect(logger.warn).not.toHaveBeenCalled();
+		},
+	);
+
+	it("should still pass a specifier with a scheme to a custom CDN resolver", async () => {
+		const priority = vi.fn((key: string) => `https://esm.sh/${key.replace(/^npm:/, "")}`);
+		const options: PluginOptions = {
+			fetchImpl: createMockFetch({ "https://esm.sh/react": "export {};" }),
+			priority: [priority, "skypack"],
+		};
+
+		expect((await resolveDependency("npm:react", options))?.url).toBe("https://esm.sh/react");
+		expect(priority).toHaveBeenCalledWith("npm:react", undefined);
+	});
+
 	it("should resolve package from skypack by default", async () => {
 		const mockContent = 'export const foo = "bar";';
 		const options: PluginOptions = {

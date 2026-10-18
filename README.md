@@ -110,7 +110,7 @@ importCdn({
 });
 ```
 
-A custom function receives the specifier as written and, as its second argument, the version from `versions` that applies to it, if any.
+A custom function receives the specifier as written and, as its second argument, the version from `versions` that applies to it, if any. That includes a specifier with a scheme other than `http(s):`, such as `npm:react` or `virtual:x`, which the built-in `"skypack"` entry skips because it is not an npm name.
 
 ## Behaviour
 
