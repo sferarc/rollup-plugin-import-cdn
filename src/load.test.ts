@@ -36,17 +36,20 @@ describe("resolveDependency", () => {
 		expect(await resolveDependency("file://path", options)).toBeNull();
 	});
 
-	it.each(["virtual:greeting", "data:text/javascript,export{}", "HTTPS://esm.test/x.js"])(
-		"should not request %s from skypack, which only serves npm names",
-		async (key) => {
-			const fetchImpl = vi.fn(createMockFetch({}));
-			const logger = spyLogger();
+	it.each([
+		"virtual:greeting",
+		"data:text/javascript,export{}",
+		"HTTPS://esm.test/x.js",
+		"#internal",
+		"#internal/util.js",
+	])("should not request %s from skypack, which only serves npm names", async (key) => {
+		const fetchImpl = vi.fn(createMockFetch({}));
+		const logger = spyLogger();
 
-			expect(await resolveDependency(key, { fetchImpl }, logger)).toBeNull();
-			expect(fetchImpl).not.toHaveBeenCalled();
-			expect(logger.warn).not.toHaveBeenCalled();
-		},
-	);
+		expect(await resolveDependency(key, { fetchImpl }, logger)).toBeNull();
+		expect(fetchImpl).not.toHaveBeenCalled();
+		expect(logger.warn).not.toHaveBeenCalled();
+	});
 
 	it("should still pass a specifier with a scheme to a custom CDN resolver", async () => {
 		const priority = vi.fn((key: string) => `https://esm.sh/${key.replace(/^npm:/, "")}`);
