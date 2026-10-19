@@ -92,6 +92,18 @@ describe("importCdn", () => {
 		])("rejects %s for integrity", (_, integrity, message) => {
 			expect(() => importCdn({ fetchImpl, integrity: integrity as never })).toThrow(message);
 		});
+
+		// A non-function used to pass and fail every request with "baseFetch is not a function",
+		// which reads as a network error: each import was warned about and left unresolved.
+		it.each([
+			["a string", "https://cdn.skypack.dev"],
+			["an object", { fetch: createMockFetch({}) }],
+			["a number", 1],
+		])("rejects %s as fetchImpl", (_, value) => {
+			expect(() => importCdn({ fetchImpl: value as never })).toThrow(
+				"[rollup-plugin-import-cdn] The fetchImpl option must be a function (url, init) => Promise<Response>.",
+			);
+		});
 	});
 
 	it("should use global fetch when available", () => {
