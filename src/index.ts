@@ -169,6 +169,9 @@ export function importCdn(pluginOptions: ImportCdnOptions = {}): RollupPlugin {
 
 	// Module id to the URL its source was served from, after redirects.
 	const moduleUrls = new Map<string, string>();
+	// Served URL to the first module id resolved to it, so a bare name that redirects to a URL
+	// another module imports directly is bundled once rather than as two copies.
+	const modulesByUrl = new Map<string, { id: string; main: string }>();
 
 	const options = { ...pluginOptions, fetchImpl };
 
@@ -177,6 +180,7 @@ export function importCdn(pluginOptions: ImportCdnOptions = {}): RollupPlugin {
 		buildStart() {
 			responses.clear();
 			moduleUrls.clear();
+			modulesByUrl.clear();
 		},
 		async resolveId(key: string, importer?: string) {
 			const importerUrl =
@@ -196,6 +200,10 @@ export function importCdn(pluginOptions: ImportCdnOptions = {}): RollupPlugin {
 
 			const dependency = await resolveDependency(key, options, contextLogger(this));
 			if (!dependency) return;
+			// Only an identical body is shared, so an integrity entry on either URL still covers it.
+			const seen = modulesByUrl.get(dependency.url);
+			if (seen?.main === dependency.main) return seen.id;
+			if (!seen) modulesByUrl.set(dependency.url, { id: dependency.name, main: dependency.main });
 			moduleUrls.set(dependency.name, dependency.url);
 			return dependency.name;
 		},

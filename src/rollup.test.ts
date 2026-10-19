@@ -16,18 +16,18 @@ const DIRECT = "https://esm.test/direct.js";
 const PKG_WASM = "https://cdn.skypack.dev/pkg-wasm";
 const PKG_WASM_REDIRECT = "https://cdn.skypack.dev/-/pkg-wasm@1.0.0/dist/index.js";
 
+const PKG_A_BODY = [
+	'import { helper } from "./helper.js";',
+	'import { shared } from "/-/shared@1.0.0/index.js";',
+	'import { b } from "pkg-b";',
+	"export const used = () => helper() + shared + b;",
+	'export const unused = () => "UNUSED_EXPORT";',
+].join("\n");
+
 // pkg-a redirects to a pinned path, so its relative and root-relative imports resolve against it.
 const cdn: Record<string, { url?: string; body: string }> = {
-	[PKG_A]: {
-		url: PKG_A_REDIRECT,
-		body: [
-			'import { helper } from "./helper.js";',
-			'import { shared } from "/-/shared@1.0.0/index.js";',
-			'import { b } from "pkg-b";',
-			"export const used = () => helper() + shared + b;",
-			'export const unused = () => "UNUSED_EXPORT";',
-		].join("\n"),
-	},
+	[PKG_A]: { url: PKG_A_REDIRECT, body: PKG_A_BODY },
+	[PKG_A_REDIRECT]: { body: PKG_A_BODY },
 	[HELPER]: {
 		body: 'import { b } from "pkg-b";\nexport const helper = () => "HELPER" + b;',
 	},
@@ -220,6 +220,45 @@ describe("Rollup build", () => {
 			[PKG_B]: 1,
 			[DIRECT]: 1,
 		});
+	});
+
+	it("bundles a module once when it is imported by bare name and by the URL it redirects to", async () => {
+		await writeFile(
+			entry,
+			[
+				'import { used } from "pkg-a";',
+				`import { used as again } from "${PKG_A_REDIRECT}";`,
+				"console.log(used === again);",
+			].join("\n"),
+		);
+		const { fetchImpl } = mockCdn();
+		const code = await build({ input: entry, plugins: [importCdn({ fetchImpl })] });
+
+		expect(code.match(/const used\S* =/g)).toHaveLength(1);
+		expect(code).toContain("console.log(used === used);");
+	});
+
+	it("keeps two modules served from one URL apart when their bodies differ", async () => {
+		await writeFile(
+			entry,
+			[
+				'import { used } from "pkg-a";',
+				`import { used as again } from "${PKG_A_REDIRECT}";`,
+				"console.log(used, again);",
+			].join("\n"),
+		);
+		const { fetchImpl } = mockCdn();
+		fetchImpl.mockImplementation(async (url) => ({
+			ok: true,
+			status: 200,
+			url: cdn[url]?.url ?? url,
+			text: async () =>
+				url === PKG_A_REDIRECT ? 'export const used = () => "SECOND_BODY";' : cdn[url]!.body,
+		}));
+		const code = await build({ input: entry, plugins: [importCdn({ fetchImpl })] });
+
+		expect(code).toContain('"SECOND_BODY"');
+		expect(code).toContain('"HELPER"');
 	});
 
 	it("refetches every URL when the same plugin instance builds again", async () => {
