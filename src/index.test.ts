@@ -355,15 +355,31 @@ describe("importCdn", () => {
 			}
 		});
 
-		it.each([-1, Number.NaN, Number.POSITIVE_INFINITY, "1000"])("rejects timeout %s", (timeout) => {
-			expect(() =>
-				importCdn({
-					fetchImpl: createMockFetch({}),
-					// @ts-expect-error - checking runtime validation of untyped input
-					timeout,
-				}),
-			).toThrow("The timeout option must be a non-negative number");
+		it("accepts the largest delay setTimeout can hold", async () => {
+			const fetchImpl = vi.fn<FetchImpl>(async (url) => {
+				await new Promise((resolve) => setTimeout(resolve, 20));
+				return { ok: true, url, text: async () => "export const slow = 1;" };
+			});
+			const { resolveId } = hooks(
+				importCdn({ fetchImpl, priority: [() => workingUrl], timeout: 2 ** 31 - 1 }),
+			);
+
+			expect(await resolveId("slow")).toBe("slow");
 		});
+
+		// Node runs a longer setTimeout after 1ms, so every request would time out at once.
+		it.each([-1, Number.NaN, Number.POSITIVE_INFINITY, "1000", 2 ** 31, Number.MAX_SAFE_INTEGER])(
+			"rejects timeout %s",
+			(timeout) => {
+				expect(() =>
+					importCdn({
+						fetchImpl: createMockFetch({}),
+						// @ts-expect-error - checking runtime validation of untyped input
+						timeout,
+					}),
+				).toThrow("The timeout option must be a non-negative number");
+			},
+		);
 	});
 
 	describe("importer-relative specifiers", () => {

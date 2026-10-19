@@ -39,6 +39,8 @@ const isKnownCdn = (value: unknown) =>
 	typeof value === "string" && (availableCDNs as readonly string[]).includes(value);
 
 const DEFAULT_TIMEOUT_MS = 30_000;
+// Node runs a setTimeout longer than this after 1ms, which would time out every request.
+const MAX_TIMEOUT_MS = 2 ** 31 - 1;
 
 function validateOptions({ priority, cache, integrity, timeout }: ImportCdnOptions) {
 	if (priority !== undefined) {
@@ -79,10 +81,13 @@ function validateOptions({ priority, cache, integrity, timeout }: ImportCdnOptio
 	}
 	if (
 		timeout !== undefined &&
-		(typeof timeout !== "number" || !Number.isFinite(timeout) || timeout < 0)
+		(typeof timeout !== "number" ||
+			!Number.isFinite(timeout) ||
+			timeout < 0 ||
+			timeout > MAX_TIMEOUT_MS)
 	) {
 		throw new Error(
-			"[rollup-plugin-import-cdn] The timeout option must be a non-negative number of milliseconds (0 disables it).",
+			`[rollup-plugin-import-cdn] The timeout option must be a non-negative number of milliseconds no greater than ${MAX_TIMEOUT_MS} (0 disables it).`,
 		);
 	}
 }
