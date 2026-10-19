@@ -23,10 +23,17 @@ const isForeignId = (id: string) =>
 const isHttpUrl = (id: string) => /^https?:\/\//.test(id);
 
 // Rollup's default resolver accepts an entry with or without these extensions.
-const isLocalEntry = (id: string) =>
-	[id, `${id}.mjs`, `${id}.js`].some((candidate) =>
-		statSync(path.resolve(candidate), { throwIfNoEntry: false })?.isFile(),
-	);
+// `throwIfNoEntry` only covers ENOENT, so an id that cannot be a path (ENAMETOOLONG, EACCES)
+// would otherwise throw and fail the build instead of reaching the next plugin.
+const isFile = (candidate: string) => {
+	try {
+		return statSync(path.resolve(candidate), { throwIfNoEntry: false })?.isFile() ?? false;
+	} catch {
+		return false;
+	}
+};
+
+const isLocalEntry = (id: string) => [id, `${id}.mjs`, `${id}.js`].some(isFile);
 
 const isKnownCdn = (value: unknown) =>
 	typeof value === "string" && (availableCDNs as readonly string[]).includes(value);

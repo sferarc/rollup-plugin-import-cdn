@@ -138,6 +138,22 @@ describe("Rollup build", () => {
 		expect(fetchCounts()).toEqual({});
 	});
 
+	it("leaves a virtual: entry too long to be a file name to the plugin listed after it", async () => {
+		const { fetchImpl, fetchCounts } = mockCdn();
+		// One path segment over 255 bytes: stat fails with ENAMETOOLONG rather than ENOENT.
+		const input = `virtual:${"a".repeat(300)}`;
+		const virtual: Plugin = {
+			name: "virtual-entry",
+			resolveId: (id) => (id === input ? id : undefined),
+			load: (id) => (id === input ? 'console.log("VIRTUAL_ENTRY");' : undefined),
+		};
+
+		const code = await build({ input, plugins: [importCdn({ fetchImpl }), virtual] });
+
+		expect(code).toContain('"VIRTUAL_ENTRY"');
+		expect(fetchCounts()).toEqual({});
+	});
+
 	it("leaves a #subpath import to the plugin listed after it", async () => {
 		const { fetchImpl, fetchCounts } = mockCdn();
 		await writeFile(entry, 'import { greeting } from "#greeting";\nconsole.log(greeting);');
