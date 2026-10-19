@@ -24,7 +24,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       # Node and pnpm come from mise.toml, checked against mise.lock.
-      - uses: jdx/mise-action@08ae2a091c038e1e05ec6f5115dc5c69d5a2a6b8 # v5.1.2
+      - uses: jdx/mise-action@fc42bcc7ddbf51124c30f95a877a0c5168a3bfde # v5.2.1
 
       - run: pnpm install --frozen-lockfile
 
@@ -64,7 +64,7 @@ jobs:
         run: echo "MISE_NODE_VERSION=$(jq -r '.engines.node' package.json | sed 's/^>=//')" >> "$GITHUB_ENV"
 
       # The action installs with --locked, which refuses a Node absent from mise.lock.
-      - uses: jdx/mise-action@08ae2a091c038e1e05ec6f5115dc5c69d5a2a6b8 # v5.1.2
+      - uses: jdx/mise-action@fc42bcc7ddbf51124c30f95a877a0c5168a3bfde # v5.2.1
         with:
           install: false
 
