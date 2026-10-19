@@ -42,7 +42,13 @@ const DEFAULT_TIMEOUT_MS = 30_000;
 // Node runs a setTimeout longer than this after 1ms, which would time out every request.
 const MAX_TIMEOUT_MS = 2 ** 31 - 1;
 
-function validateOptions({ priority, cache, integrity, timeout }: ImportCdnOptions) {
+function validateOptions({ fetchImpl, priority, cache, integrity, timeout }: ImportCdnOptions) {
+	// Called on every request, so anything else would fail each one as a network error.
+	if (fetchImpl != null && typeof fetchImpl !== "function") {
+		throw new Error(
+			"[rollup-plugin-import-cdn] The fetchImpl option must be a function (url, init) => Promise<Response>.",
+		);
+	}
 	if (priority !== undefined) {
 		// resolveDependencyUrls maps over it, so a lone name or function would fail at the first import.
 		if (!Array.isArray(priority)) {
