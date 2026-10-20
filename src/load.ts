@@ -250,11 +250,12 @@ export async function rewriteImports(dependency: Dependency) {
 
 		// `n` is the string's value, so `"./ü.js"` names `./ü.js`; the source text would
 		// turn its backslash into a path separator. The URL goes back between the original
-		// quotes, where a `'` it keeps from the value needs escaping.
+		// quotes, where a `'` or a `\` it keeps from the value (`\` survives in a query or
+		// fragment) needs escaping.
 		const specifier = n ?? main.slice(s, e);
 		if (!isRelativeReference(specifier)) continue;
 
-		const url = new URL(specifier, dependency.url).href.replace(/['"]/g, "\\$&");
+		const url = new URL(specifier, dependency.url).href.replace(/['"\\]/g, "\\$&");
 		parts.push(main.slice(last, s), url);
 		last = e;
 	}
