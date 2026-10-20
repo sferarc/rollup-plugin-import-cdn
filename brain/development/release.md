@@ -20,11 +20,12 @@ npm trusted publishing only: the job has `id-token: write`, and npm exchanges th
 
 ## History
 
-Before this repository existed the plugin lived in the SferaDev/SferaDev monorepo: `0.3.0` came with its migration there (SferaDev/SferaDev#18) and `0.3.1` with that monorepo's changesets version pull request (SferaDev/SferaDev#660). Versions up to `0.2.3` came from an earlier standalone repository (SferaDev/SferaDev#18 body, `npm view rollup-plugin-import-cdn time`). The tags `rollup-plugin-import-cdn@0.3.0` and `rollup-plugin-import-cdn@0.3.1` came across with the history. On 2026-10-08 npm's latest is `0.3.1` (`npm view rollup-plugin-import-cdn version`), matching `package.json`. 
+Before this repository existed the plugin lived in the SferaDev/SferaDev monorepo: `0.3.0` came with its migration there (SferaDev/SferaDev#18) and `0.3.1` with that monorepo's changesets version pull request (SferaDev/SferaDev#660). Versions up to `0.2.3` came from an earlier standalone repository (SferaDev/SferaDev#18 body, `npm view rollup-plugin-import-cdn time`). The tags `rollup-plugin-import-cdn@0.3.0` and `rollup-plugin-import-cdn@0.3.1` came across with the history. On 2026-10-08 npm's latest is `0.3.1` (`npm view rollup-plugin-import-cdn version`), matching `package.json`.
+
 ## First release
 
 On 2026-10-20 `changeset status` over the pending changesets reports one `minor` bump for `rollup-plugin-import-cdn`, so the first run with `RELEASE_ENABLED` on opens a version pull request for `0.4.0`.
 
 The tag format is `v<version>`, for example `v0.4.0`. `@changesets/cli` tags `<name>@<version>` only for monorepo tools and `v<version>` for a `root` tool (`gitTags.mjs`), and `@manypkg/get-packages` reports this repository as `root`. The older `rollup-plugin-import-cdn@0.3.x` tags came from the monorepo.
 
-Order for the owner: create the npm trusted publisher for this repository and `release.yml`, then set `RELEASE_ENABLED` to `true`.
+Order for the owner: create the npm trusted publisher for this repository and `release.yml`, then set `RELEASE_ENABLED` to `true`. Setting the variable starts nothing by itself: the first run needs the next push to `main` or a `workflow_dispatch` of `release.yml`. The `GIT_TOKEN` secret that `release.yml` uses already exists as an org secret visible to this repository.
