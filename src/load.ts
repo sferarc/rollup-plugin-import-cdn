@@ -248,7 +248,7 @@ export async function rewriteImports(dependency: Dependency) {
 		// quotes included, so rewriting it would put the quotes inside the URL.
 		if (d > -1) continue;
 
-		// `n` is the string's value, so `"./ü.js"` names `./ü.js`; the source text would
+		// `n` is the string's value, so `"./\u00fc.js"` names `./ü.js`; the source text would
 		// turn its backslash into a path separator. The URL goes back between the original
 		// quotes, where a `'` or a `\` it keeps from the value (`\` survives in a query or
 		// fragment) needs escaping.
