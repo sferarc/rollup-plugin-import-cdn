@@ -1,6 +1,6 @@
 # Testing
 
-`pnpm test` runs vitest in a Node environment with `restoreMocks: true` (`vitest.config.ts`) over `src/*.test.ts`. Globals are off since #35, so each test file imports what it uses (`describe`, `it`, `expect`, `vi`, hooks) from `vitest`, and `restoreMocks` restores spies between tests. On 2026-10-19 the suite was 5 files and 194 tests (`it.each` cases counted separately), about two seconds wall clock.
+`pnpm test` runs vitest in a Node environment with `restoreMocks: true` (`vitest.config.ts`) over `src/*.test.ts`. Globals are off since #35, so each test file imports what it uses (`describe`, `it`, `expect`, `vi`, hooks) from `vitest`, and `restoreMocks` restores spies between tests. On 2026-10-20 the suite was 5 files and 195 tests (`it.each` cases counted separately), about two seconds wall clock.
 
 | File | Covers |
 | --- | --- |

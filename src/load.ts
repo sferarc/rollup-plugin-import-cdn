@@ -239,7 +239,7 @@ export async function rewriteImports(dependency: Dependency) {
 	const parts: string[] = [];
 	let last = 0;
 
-	for (const { s, e, d } of imports) {
+	for (const { n, s, e, d } of imports) {
 		// The lexer reports `import.meta` as a record with d === -2 whose span is the
 		// `import.meta` expression itself, not a specifier.
 		if (d === -2) continue;
@@ -248,10 +248,14 @@ export async function rewriteImports(dependency: Dependency) {
 		// quotes included, so rewriting it would put the quotes inside the URL.
 		if (d > -1) continue;
 
-		const specifier = main.slice(s, e);
+		// `n` is the string's value, so `"./ü.js"` names `./ü.js`; the source text would
+		// turn its backslash into a path separator. The URL goes back between the original
+		// quotes, where a `'` it keeps from the value needs escaping.
+		const specifier = n ?? main.slice(s, e);
 		if (!isRelativeReference(specifier)) continue;
 
-		parts.push(main.slice(last, s), new URL(specifier, dependency.url).href);
+		const url = new URL(specifier, dependency.url).href.replace(/['"]/g, "\\$&");
+		parts.push(main.slice(last, s), url);
 		last = e;
 	}
 
