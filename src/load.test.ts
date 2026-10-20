@@ -434,6 +434,22 @@ export const combined = a + b;`;
 		);
 	});
 
+	it("should resolve escaped specifiers by their value rather than their source text", async () => {
+		const mockContent =
+			'import "./\\u00fc.js";\nimport \'./it\\\'s.js\';\nimport "./caf\\xe9.js";\nimport "./x.js?a\\\\b";\nimport "./y.js#\\\\u";';
+		const options: PluginOptions = {
+			fetchImpl: createMockFetch({
+				"https://cdn.skypack.dev/escaped": mockContent,
+			}),
+		};
+
+		const result = await loadHook("escaped", options);
+
+		expect(result).toBe(
+			'import "https://cdn.skypack.dev/%C3%BC.js";\nimport \'https://cdn.skypack.dev/it\\\'s.js\';\nimport "https://cdn.skypack.dev/caf%C3%A9.js";\nimport "https://cdn.skypack.dev/x.js?a\\\\b";\nimport "https://cdn.skypack.dev/y.js#\\\\u";',
+		);
+	});
+
 	it("should resolve relative and root-absolute specifiers against the response URL", async () => {
 		const mockContent = 'import "./a.js";\nimport "../b.js";\nimport "/-/c.js";';
 		const options: PluginOptions = {
