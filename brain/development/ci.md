@@ -22,6 +22,12 @@
 
 Actions are pinned to full commit SHAs with the version in a trailing comment, which the sferarc organisation requires. Update both together.
 
+## Shift runner and the SWC cache
+
+On the bug-shift runner, `pnpm build` fails before reaching the source: `@swc/core` refuses to load its native addon with `ERR_SWC_NATIVE_CACHE` ("validate cache root /home/runner/.cache: cache root has a parent writable by another user without trusted sticky protection"). `pnpm is-tree-shakable` then fails with "No entry point" because there is no `dist/` (issue #5, seen while preparing #4).
+
+Shifts leave `pnpm build` and `pnpm is-tree-shakable` to CI's `Check` job and run the other checks locally. The runner fix is either correcting the permissions of the cache root's parent or setting `SWC_NATIVE_BINDING_CACHE` in the runner environment. Neither lives in this repository, and GitHub-hosted CI is not affected.
+
 ## Branch rules on `main`
 
 The `main-default` ruleset, read from the GitHub API on 2026-10-08: `Check` is the one required status check, changes go through pull requests with squash or rebase merges, history is linear, and force pushes and deletion are blocked. That reading predates `Test (minimum Node)`; whether the ruleset now requires it too is unknown until the ruleset is read again.
