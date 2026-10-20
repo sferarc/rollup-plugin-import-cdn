@@ -24,9 +24,11 @@ Actions are pinned to full commit SHAs with the version in a trailing comment, w
 
 ## Shift runner and the SWC cache
 
-On the self-hosted shift runner, `pnpm build` used to fail before reaching the source: `@swc/core` refused to load its native addon with `ERR_SWC_NATIVE_CACHE` because `/home/runner/.cache` has a parent writable by another user without trusted sticky protection. `pnpm is-tree-shakable` then failed with "No entry point" because there was no `dist/` (issue #5). GitHub-hosted CI was never affected.
+On the self-hosted shift runner, `pnpm build` fails before reaching the source: `@swc/core` refuses to load its native addon with `ERR_SWC_NATIVE_CACHE` because `/home/runner/.cache` has a parent writable by another user without trusted sticky protection. `pnpm is-tree-shakable` then fails with "No entry point" because there is no `dist/` (issue #5). GitHub-hosted CI is not affected.
 
-The fix lives in `sferarc/hq`, not here: the reusable `shift.yml` exports `SWC_NATIVE_BINDING_CACHE=$RUNNER_TEMP/swc-cache` for the whole job. Once that is merged, a shift can run all seven checks of `pnpm check`. If `pnpm build` fails with `ERR_SWC_NATIVE_CACHE` again, the variable is missing from the shift job; the repository needs no change.
+Until the runner is fixed, shifts leave `pnpm build` and `pnpm is-tree-shakable` to CI's `Check` job and run the other checks locally.
+
+The fix does not live in this repository: the shift workflow has to set `SWC_NATIVE_BINDING_CACHE` to a per-job temp directory. A change doing that is prepared but not merged, and it is unverified on a live runner. Once it has merged and a shift has run `pnpm build` successfully, drop the workaround above and let shifts run all seven checks of `pnpm check`.
 
 ## Branch rules on `main`
 
