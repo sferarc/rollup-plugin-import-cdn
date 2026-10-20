@@ -483,6 +483,20 @@ export const combined = a + b;`;
 		);
 	});
 
+	it("should resolve escape sequences in a relative specifier before rewriting it", async () => {
+		const mockContent =
+			'import "./\\u0061.js";\nimport \'./it\\\'s.js\';\nimport "./\\x62.js";\nexport * from "./\\u{63}.js";';
+		const options: PluginOptions = {
+			fetchImpl: createMockFetch({ "https://cdn.skypack.dev/escaped": mockContent }),
+		};
+
+		const result = await loadHook("escaped", options);
+
+		expect(result).toBe(
+			'import "https://cdn.skypack.dev/a.js";\nimport \'https://cdn.skypack.dev/it%27s.js\';\nimport "https://cdn.skypack.dev/b.js";\nexport * from "https://cdn.skypack.dev/c.js";',
+		);
+	});
+
 	it("should keep offsets intact around non-ASCII text", async () => {
 		const mockContent =
 			'const s = "héllo 🎉 日本";\nimport { a } from "./a.js";\nconst t = "ünï 🚀";\nimport { b } from "./b.js";\nexport const u = "ß 🌍";';

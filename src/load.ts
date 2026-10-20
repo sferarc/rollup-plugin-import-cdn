@@ -216,6 +216,37 @@ export async function loadHook(key: string, options: PluginOptions, logger: Logg
 	return rewriteImports(dependency);
 }
 
+const simpleEscapes: Record<string, string> = {
+	b: "\b",
+	f: "\f",
+	n: "\n",
+	r: "\r",
+	t: "\t",
+	v: "\v",
+	"0": "\0",
+};
+
+// Reads the escapes a string literal may carry; the lexer reports the raw text between the quotes.
+function unescapeSpecifier(raw: string) {
+	if (!raw.includes("\\")) return raw;
+	return raw.replace(
+		/\\(?:u\{([\da-f]+)\}|u([\da-f]{4})|x([\da-f]{2})|(\r\n|[\s\S]))/gi,
+		(_, braced, unicode, hex, other) => {
+			const code = braced ?? unicode ?? hex;
+			if (code !== undefined) {
+				const point = Number.parseInt(code, 16);
+				return point <= 0x10ffff ? String.fromCodePoint(point) : "";
+			}
+			if (/^[\r\n\u2028\u2029]/.test(other)) return "";
+			return simpleEscapes[other] ?? other;
+		},
+	);
+}
+
+// A quote or backslash in the URL would end or escape the literal it is written into.
+const quoteSafe = (href: string) =>
+	href.replace(/['"`\\]/g, (c) => `%${c.charCodeAt(0).toString(16)}`);
+
 export async function rewriteImports(dependency: Dependency) {
 	await init();
 
@@ -248,10 +279,10 @@ export async function rewriteImports(dependency: Dependency) {
 		// quotes included, so rewriting it would put the quotes inside the URL.
 		if (d > -1) continue;
 
-		const specifier = main.slice(s, e);
+		const specifier = unescapeSpecifier(main.slice(s, e));
 		if (!isRelativeReference(specifier)) continue;
 
-		parts.push(main.slice(last, s), new URL(specifier, dependency.url).href);
+		parts.push(main.slice(last, s), quoteSafe(new URL(specifier, dependency.url).href));
 		last = e;
 	}
 
