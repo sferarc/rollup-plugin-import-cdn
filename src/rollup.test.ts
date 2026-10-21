@@ -307,7 +307,7 @@ describe("Rollup build", () => {
 		});
 	});
 
-	it("rebuilds in watch mode with a refetch, relative imports and one copy of a shared module", async () => {
+	it("rebuilds in watch mode with Rollup's cache on, refetching and keeping one copy of a shared module", async () => {
 		await writeFile(
 			entry,
 			[
@@ -321,7 +321,6 @@ describe("Rollup build", () => {
 		const file = path.join(dir, "out", "bundle.js");
 		const watcher = watch({
 			input: entry,
-			cache: false,
 			output: { file, format: "es" },
 			onwarn: (warning) => expect.fail(warning.message),
 			plugins: [importCdn({ fetchImpl })],
@@ -368,7 +367,14 @@ describe("Rollup build", () => {
 			expect(second.match(/const used\S* =/g)).toHaveLength(1);
 			expect(second).toContain('"HELPER"');
 			expect(second).toContain('"SHARED"');
-			expect(fetchCounts()).toMatchObject({ [PKG_A]: 2, [HELPER]: 2, [SHARED]: 2, [PKG_B]: 2 });
+			// Rollup's watch cache reuses resolved ids, so the redirect URL is not resolved again.
+			expect(fetchCounts()).toEqual({
+				[PKG_A]: 2,
+				[PKG_A_REDIRECT]: 1,
+				[HELPER]: 2,
+				[SHARED]: 2,
+				[PKG_B]: 2,
+			});
 		} finally {
 			await watcher.close();
 		}
