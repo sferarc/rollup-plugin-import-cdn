@@ -104,7 +104,8 @@ Entries from the [fetch cache](#fetch-cache) are checked too, so a modified cach
 ```js
 importCdn({
   priority: [
-    (pkg, version) => `https://cdn.jsdelivr.net/npm/${pkg}${version ? `@${version}` : ""}`,
+    (pkg, version) =>
+      `https://cdn.example.com/${version ? pkg.replace(/^(@[^/]+\/)?[^/]+/, `$&@${version}`) : pkg}`,
     "esm.sh",
   ],
 });
