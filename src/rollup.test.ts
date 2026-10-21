@@ -276,7 +276,7 @@ describe("Rollup build", () => {
 		const second = await build({ input: entry, plugins: [plugin] });
 
 		expect(second).toBe(first);
-		expect(fetchCounts()).toMatchObject({ [PKG_A]: 2, [HELPER]: 2, [SHARED]: 2, [PKG_B]: 2 });
+		expect(Object.values(fetchCounts())).toEqual([2, 2, 2, 2, 2]);
 	});
 
 	it("writes the bundle to disk with the fetches it already made", async () => {
@@ -288,14 +288,23 @@ describe("Rollup build", () => {
 			onwarn: (warning) => expect.fail(warning.message),
 			plugins: [importCdn({ fetchImpl })],
 		});
-		await bundle.write({ file, format: "es" });
-		await bundle.close();
+		try {
+			await bundle.write({ file, format: "es" });
+		} finally {
+			await bundle.close();
+		}
 
 		const code = await readFile(file, "utf8");
 		for (const marker of ['"HELPER"', '"SHARED"', '"PKG_B"', '"DIRECT"', '"LOCAL"']) {
 			expect(code).toContain(marker);
 		}
-		expect(Object.values(fetchCounts())).toEqual([1, 1, 1, 1, 1]);
+		expect(fetchCounts()).toEqual({
+			[PKG_A]: 1,
+			[HELPER]: 1,
+			[SHARED]: 1,
+			[PKG_B]: 1,
+			[DIRECT]: 1,
+		});
 	});
 
 	it("rebuilds in watch mode with a refetch, relative imports and one copy of a shared module", async () => {
@@ -312,6 +321,7 @@ describe("Rollup build", () => {
 		const file = path.join(dir, "out", "bundle.js");
 		const watcher = watch({
 			input: entry,
+			cache: false,
 			output: { file, format: "es" },
 			onwarn: (warning) => expect.fail(warning.message),
 			plugins: [importCdn({ fetchImpl })],
@@ -319,6 +329,7 @@ describe("Rollup build", () => {
 		const failure = new Promise<never>((_, reject) => {
 			watcher.on("event", (event) => {
 				if (event.code === "ERROR") reject(event.error);
+				if (event.code === "BUNDLE_END") void event.result.close();
 			});
 		});
 		const nextEnd = () =>
