@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import {
@@ -8,6 +8,7 @@ import {
 	type RollupLog,
 	type RollupOptions,
 	rollup,
+	VERSION,
 	watch,
 } from "rollup";
 import { afterEach, beforeEach, describe, expect, it, type MockInstance, vi } from "vitest";
@@ -47,9 +48,9 @@ const cdn: Record<string, { url?: string; body: string }> = {
 	},
 };
 
-function mockCdn() {
+function mockCdn(extra: typeof cdn = {}) {
 	const fetchImpl = vi.fn<FetchImpl>(async (url) => {
-		const entry = cdn[url];
+		const entry = extra[url] ?? cdn[url];
 		return {
 			ok: entry !== undefined,
 			status: entry ? 200 : 404,
@@ -64,6 +65,10 @@ function mockCdn() {
 	};
 	return { fetchImpl, fetchCounts };
 }
+
+// `logLevel` and `onLog` arrived in Rollup 3.25; the CI Rollup 3 leg runs 3.0.
+const [major = 0, minor = 0] = VERSION.split(".").map(Number);
+const hasOnLog = major > 3 || (major === 3 && minor >= 25);
 
 async function build(options: RollupOptions) {
 	const bundle = await rollup({ onwarn: (warning) => expect.fail(warning.message), ...options });
@@ -279,32 +284,70 @@ describe("Rollup build", () => {
 		expect(Object.values(fetchCounts())).toEqual([2, 2, 2, 2, 2]);
 	});
 
-	it("writes the bundle to disk with the fetches it already made", async () => {
+	it("rebuilds from the on-disk cache with a fetchImpl that throws", async () => {
+		const { fetchImpl: pinnedFetch, fetchCounts } = mockCdn({
+			"https://cdn.skypack.dev/pkg-a@1.0.0": cdn[PKG_A]!,
+			"https://cdn.skypack.dev/pkg-b@1.0.0": cdn[PKG_B]!,
+		});
+		const cacheDir = path.join(dir, "cache");
+		const versions = { "pkg-a": "1.0.0", "pkg-b": "1.0.0" };
+		const pinnedEntry = path.join(dir, "pinned.js");
+		await writeFile(
+			pinnedEntry,
+			[
+				'import { used } from "pkg-a";',
+				'import { b } from "pkg-b";',
+				"console.log(used(), b);",
+			].join("\n"),
+		);
+
+		const first = await build({
+			input: pinnedEntry,
+			plugins: [importCdn({ fetchImpl: pinnedFetch, cache: cacheDir, versions })],
+		});
+		expect(Object.keys(fetchCounts()).sort()).toEqual([
+			"https://cdn.skypack.dev/-/pkg-a@1.0.0/dist/helper.js",
+			"https://cdn.skypack.dev/-/shared@1.0.0/index.js",
+			"https://cdn.skypack.dev/pkg-a@1.0.0",
+			"https://cdn.skypack.dev/pkg-b@1.0.0",
+		]);
+
+		const offline = vi.fn<FetchImpl>(async () => {
+			throw new Error("The cache should have served every URL");
+		});
+		const second = await build({
+			input: pinnedEntry,
+			plugins: [importCdn({ fetchImpl: offline, cache: cacheDir, versions })],
+		});
+
+		expect(offline).not.toHaveBeenCalled();
+		expect(second).toBe(first);
+		expect(second).toContain('"HELPER"');
+	});
+
+	it("writes two entries and their shared chunk to disk with one fetch per URL", async () => {
 		const { fetchImpl, fetchCounts } = mockCdn();
-		const file = path.join(dir, "out", "bundle.js");
+		const second = path.join(dir, "second.js");
+		const outDir = path.join(dir, "out");
+		await writeFile(entry, `import { direct } from "${DIRECT}";\nconsole.log("A", direct);`);
+		await writeFile(second, `import { direct } from "${DIRECT}";\nconsole.log("B", direct);`);
 
 		const bundle = await rollup({
-			input: entry,
+			input: [entry, second],
 			onwarn: (warning) => expect.fail(warning.message),
 			plugins: [importCdn({ fetchImpl })],
 		});
 		try {
-			await bundle.write({ file, format: "es" });
+			await bundle.write({ dir: outDir, format: "es" });
 		} finally {
 			await bundle.close();
 		}
 
-		const code = await readFile(file, "utf8");
-		for (const marker of ['"HELPER"', '"SHARED"', '"PKG_B"', '"DIRECT"', '"LOCAL"']) {
-			expect(code).toContain(marker);
-		}
-		expect(fetchCounts()).toEqual({
-			[PKG_A]: 1,
-			[HELPER]: 1,
-			[SHARED]: 1,
-			[PKG_B]: 1,
-			[DIRECT]: 1,
-		});
+		const files = await readdir(outDir);
+		expect(files).toHaveLength(3);
+		const codes = await Promise.all(files.map((file) => readFile(path.join(outDir, file), "utf8")));
+		expect(codes.filter((code) => code.includes('"DIRECT"'))).toHaveLength(1);
+		expect(fetchCounts()).toEqual({ [DIRECT]: 1 });
 	});
 
 	it("rebuilds in watch mode with Rollup's cache on, refetching and keeping one copy of a shared module", async () => {
@@ -331,6 +374,7 @@ describe("Rollup build", () => {
 				if (event.code === "BUNDLE_END") void event.result.close();
 			});
 		});
+		failure.catch(() => {});
 		const nextEnd = () =>
 			Promise.race([
 				failure,
@@ -380,7 +424,7 @@ describe("Rollup build", () => {
 		}
 	});
 
-	it("reports CDN network errors through Rollup's log handlers", async () => {
+	it.skipIf(!hasOnLog)("reports CDN network errors through Rollup's log handlers", async () => {
 		await writeFile(entry, 'import { x } from "offline";\nconsole.log(x);');
 		const logs: { level: LogLevel; log: RollupLog }[] = [];
 
