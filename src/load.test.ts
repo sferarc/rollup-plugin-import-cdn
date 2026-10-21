@@ -125,6 +125,31 @@ describe("resolveDependency", () => {
 		expect((await resolveDependency(key, options))?.url).toBe(`https://cdn.skypack.dev/${path}`);
 	});
 
+	it.each([
+		["react", {}, "react"],
+		["react-dom/client", { "react-dom": "18.2.0" }, "react-dom@18.2.0/client"],
+		["@scope/pkg/sub", { "@scope/pkg": "1.0.0" }, "@scope/pkg@1.0.0/sub"],
+		["react@17/jsx-runtime", { react: "18.2.0" }, "react@17/jsx-runtime"],
+	])("should build the esm.sh URL for %s (%j)", async (key, versions, path) => {
+		const options: PluginOptions = {
+			fetchImpl: createMockFetch({ [`https://esm.sh/${path}`]: "export {};" }),
+			priority: ["esm.sh"],
+			versions,
+		};
+
+		expect((await resolveDependency(key, options))?.url).toBe(`https://esm.sh/${path}`);
+	});
+
+	it.each(["virtual:x", "#internal", "HTTPS://example.com/x.js"])(
+		"should not request %s from esm.sh",
+		async (key) => {
+			const fetchImpl = vi.fn(createMockFetch({}));
+
+			expect(await resolveDependency(key, { fetchImpl, priority: ["esm.sh"] })).toBeNull();
+			expect(fetchImpl).not.toHaveBeenCalled();
+		},
+	);
+
 	it("should pass the pinned version to a custom CDN resolver", async () => {
 		const priority = vi.fn((key: string, version?: string) => `https://esm.sh/${key}?v=${version}`);
 		const options: PluginOptions = {

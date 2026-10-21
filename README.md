@@ -6,7 +6,7 @@ Import ESM modules from URLs for local processing by Rollup, enabling tree-shaki
 
 - **CDN Imports** - Import npm packages directly from CDN URLs
 - **Tree-shaking** - Full tree-shaking support for CDN modules
-- **Multiple CDNs** - Support for Skypack with custom CDN fallback chains
+- **Multiple CDNs** - Skypack and esm.sh built in, with custom CDN fallback chains
 - **Version Pinning** - Pin specific package versions for reproducible builds
 
 ## Installation
@@ -44,7 +44,7 @@ import confetti from "https://esm.sh/canvas-confetti";
 | `cache` | none | Directory for an on-disk cache of responses from pinned URLs. See [Fetch Cache](#fetch-cache). |
 | `fetchImpl` | global `fetch` | Function used for every request: `(url, { signal }) => Promise<{ ok, status, url, text() }>`; `signal` is passed only while `timeout` is enabled. `importCdn` throws `No fetch implementation found` when it is not set and no global `fetch` exists, and throws when it is set to anything other than a function. |
 | `integrity` | none | SRI hashes that fetched code must match, keyed by URL. See [Integrity](#integrity). |
-| `priority` | `["skypack"]` | CDNs to try, in order. Each entry is `"skypack"` or a function returning a URL; any other entry throws when the plugin is created. See [Custom CDN](#custom-cdn). |
+| `priority` | `["skypack"]` | CDNs to try, in order. Each entry is `"skypack"`, `"esm.sh"` or a function returning a URL; any other entry throws when the plugin is created. See [Custom CDN](#custom-cdn). |
 | `timeout` | `30000` | Milliseconds each request may take, reading the body included, before it counts as a network error and the next CDN is tried. A failed or timed-out URL is not retried until the next build. `0` disables it; the largest accepted value is `2147483647`, the longest delay Node's `setTimeout` holds. The plugin aborts the `signal` it passes to `fetchImpl` and stops waiting even if `fetchImpl` ignores it. |
 | `versions` | none | Versions to pin, keyed by package name or full specifier. See [Version Pinning](#version-pinning). |
 
@@ -61,7 +61,7 @@ importCdn({
 
 A version set for a package also applies to its subpaths, and goes after the package name: with `versions: { "react-dom": "18.2.0" }`, `import "react-dom/client"` fetches `https://cdn.skypack.dev/react-dom@18.2.0/client`. Scoped packages work the same way, so `@scope/pkg/sub` with `"@scope/pkg": "1.0.0"` fetches `https://cdn.skypack.dev/@scope/pkg@1.0.0/sub`. An entry for the full specifier, such as `"react-dom/client"`, takes precedence over the package entry. A specifier that carries its own version, such as `react@17/jsx-runtime`, ignores `versions`.
 
-Only the built-in `"skypack"` entry applies the pin to its URL. A custom `priority` function receives the version as its second argument and decides how to use it.
+The built-in `"skypack"` and `"esm.sh"` entries apply the pin to their URLs. A custom `priority` function receives the version as its second argument and decides how to use it.
 
 ### Fetch Cache
 
@@ -104,13 +104,13 @@ Entries from the [fetch cache](#fetch-cache) are checked too, so a modified cach
 ```js
 importCdn({
   priority: [
-    (pkg, version) => `https://esm.sh/${pkg}${version ? `?version=${version}` : ""}`,
-    "skypack",
+    (pkg, version) => `https://cdn.jsdelivr.net/npm/${pkg}${version ? `@${version}` : ""}`,
+    "esm.sh",
   ],
 });
 ```
 
-A custom function receives the specifier as written and, as its second argument, the version from `versions` that applies to it, if any. That includes a specifier with a scheme other than `http(s):`, such as `npm:react` or `virtual:x`, which the built-in `"skypack"` entry skips because it is not an npm name.
+A custom function receives the specifier as written and, as its second argument, the version from `versions` that applies to it, if any. That includes a specifier with a scheme other than `http(s):`, such as `npm:react` or `virtual:x`, which the built-in entries skip because it is not an npm name.
 
 ## Behaviour
 
