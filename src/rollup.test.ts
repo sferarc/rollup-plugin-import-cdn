@@ -1,8 +1,15 @@
 import { createHash } from "node:crypto";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { type LogLevel, type Plugin, type RollupLog, type RollupOptions, rollup } from "rollup";
+import {
+	type LogLevel,
+	type Plugin,
+	type RollupLog,
+	type RollupOptions,
+	rollup,
+	watch,
+} from "rollup";
 import { afterEach, beforeEach, describe, expect, it, type MockInstance, vi } from "vitest";
 import { importCdn } from "./index";
 import type { FetchImpl } from "./types";
@@ -269,7 +276,91 @@ describe("Rollup build", () => {
 		const second = await build({ input: entry, plugins: [plugin] });
 
 		expect(second).toBe(first);
-		expect(Object.values(fetchCounts())).toEqual([2, 2, 2, 2, 2]);
+		expect(fetchCounts()).toMatchObject({ [PKG_A]: 2, [HELPER]: 2, [SHARED]: 2, [PKG_B]: 2 });
+	});
+
+	it("writes the bundle to disk with the fetches it already made", async () => {
+		const { fetchImpl, fetchCounts } = mockCdn();
+		const file = path.join(dir, "out", "bundle.js");
+
+		const bundle = await rollup({
+			input: entry,
+			onwarn: (warning) => expect.fail(warning.message),
+			plugins: [importCdn({ fetchImpl })],
+		});
+		await bundle.write({ file, format: "es" });
+		await bundle.close();
+
+		const code = await readFile(file, "utf8");
+		for (const marker of ['"HELPER"', '"SHARED"', '"PKG_B"', '"DIRECT"', '"LOCAL"']) {
+			expect(code).toContain(marker);
+		}
+		expect(Object.values(fetchCounts())).toEqual([1, 1, 1, 1, 1]);
+	});
+
+	it("rebuilds in watch mode with a refetch, relative imports and one copy of a shared module", async () => {
+		await writeFile(
+			entry,
+			[
+				'import { used } from "pkg-a";',
+				`import { used as again } from "${PKG_A_REDIRECT}";`,
+				'import { local } from "./local.js";',
+				"console.log(used === again, local);",
+			].join("\n"),
+		);
+		const { fetchImpl, fetchCounts } = mockCdn();
+		const file = path.join(dir, "out", "bundle.js");
+		const watcher = watch({
+			input: entry,
+			output: { file, format: "es" },
+			onwarn: (warning) => expect.fail(warning.message),
+			plugins: [importCdn({ fetchImpl })],
+		});
+		const failure = new Promise<never>((_, reject) => {
+			watcher.on("event", (event) => {
+				if (event.code === "ERROR") reject(event.error);
+			});
+		});
+		const nextEnd = () =>
+			Promise.race([
+				failure,
+				new Promise<void>((resolve) => {
+					const onEvent = (event: { code: string }) => {
+						if (event.code !== "END") return;
+						watcher.off("event", onEvent);
+						resolve();
+					};
+					watcher.on("event", onEvent);
+				}),
+			]);
+
+		try {
+			await nextEnd();
+			const first = await readFile(file, "utf8");
+			expect(fetchCounts()).toEqual({
+				[PKG_A]: 1,
+				[PKG_A_REDIRECT]: 1,
+				[HELPER]: 1,
+				[SHARED]: 1,
+				[PKG_B]: 1,
+			});
+
+			// The OS watcher may not be armed yet when the first build ends, so touch the file until it fires.
+			const rebuilt = nextEnd();
+			const touch = setInterval(() => {
+				void writeFile(path.join(dir, "local.js"), 'export const local = "LOCAL_V2";');
+			}, 100);
+			await rebuilt.finally(() => clearInterval(touch));
+			const second = await readFile(file, "utf8");
+
+			expect(second).toBe(first.replace('"LOCAL"', '"LOCAL_V2"'));
+			expect(second.match(/const used\S* =/g)).toHaveLength(1);
+			expect(second).toContain('"HELPER"');
+			expect(second).toContain('"SHARED"');
+			expect(fetchCounts()).toMatchObject({ [PKG_A]: 2, [HELPER]: 2, [SHARED]: 2, [PKG_B]: 2 });
+		} finally {
+			await watcher.close();
+		}
 	});
 
 	it("reports CDN network errors through Rollup's log handlers", async () => {
