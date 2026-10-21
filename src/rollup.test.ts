@@ -2,7 +2,14 @@ import { createHash } from "node:crypto";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { type LogLevel, type Plugin, type RollupLog, type RollupOptions, rollup } from "rollup";
+import {
+	type LogLevel,
+	type Plugin,
+	type RollupLog,
+	type RollupOptions,
+	rollup,
+	VERSION,
+} from "rollup";
 import { afterEach, beforeEach, describe, expect, it, type MockInstance, vi } from "vitest";
 import { importCdn } from "./index";
 import type { FetchImpl } from "./types";
@@ -57,6 +64,10 @@ function mockCdn() {
 	};
 	return { fetchImpl, fetchCounts };
 }
+
+// `logLevel` and `onLog` arrived in Rollup 3.25; the CI Rollup 3 leg runs 3.0.
+const [major = 0, minor = 0] = VERSION.split(".").map(Number);
+const hasOnLog = major > 3 || (major === 3 && minor >= 25);
 
 async function build(options: RollupOptions) {
 	const bundle = await rollup({ onwarn: (warning) => expect.fail(warning.message), ...options });
@@ -272,7 +283,7 @@ describe("Rollup build", () => {
 		expect(Object.values(fetchCounts())).toEqual([2, 2, 2, 2, 2]);
 	});
 
-	it("reports CDN network errors through Rollup's log handlers", async () => {
+	it.skipIf(!hasOnLog)("reports CDN network errors through Rollup's log handlers", async () => {
 		await writeFile(entry, 'import { x } from "offline";\nconsole.log(x);');
 		const logs: { level: LogLevel; log: RollupLog }[] = [];
 

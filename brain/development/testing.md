@@ -12,7 +12,7 @@
 
 `src/index.test.ts` and `src/integration.test.ts` call hooks through `hooks(plugin)` from `src/test-utils.ts`, which unwraps the function or `{ handler }` form and calls it with Rollup's hook types and a fake context from `fakeContext()` that records `warn` and `debug` into the returned `logs` (`fakeContext({ withDebug: false })` mimics Rollup 3 before 3.25), so a hook signature change fails typecheck in the tests. Only test files import it, so it stays out of `dist` and knip sees it as used.
 
-Every test uses a mock `fetchImpl`; nothing touches the network. Multiple entry points, other output formats such as CJS, `bundle.write()`, watch mode and the on-disk cache inside a build stay untested. So do real CDNs and the network, and Rollup 3: `package.json` accepts `rollup` `^3.0.0 || ^4.0.0` as a peer, but the suite only runs against the catalog pin in `pnpm-workspace.yaml` (4.64.5 on 2026-10-15).
+Every test uses a mock `fetchImpl`; nothing touches the network. Multiple entry points, other output formats such as CJS, `bundle.write()`, watch mode and the on-disk cache inside a build stay untested. So do real CDNs and the network. The local suite runs against the catalog Rollup pin in `pnpm-workspace.yaml`; CI also runs it on Rollup 3.0.0 (see [[ci]]), where the `onLog` test is skipped because `logLevel` and `onLog` need 3.25.
 
 ## Related
 
