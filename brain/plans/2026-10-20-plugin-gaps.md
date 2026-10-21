@@ -8,7 +8,7 @@ Cheapest and they guard the options users already rely on.
 
 1. **Rollup 3 in CI.** `package.json` accepts `rollup` `^3.0.0 || ^4.0.0`, but the suite only runs against the catalog pin. Add a CI job or matrix leg that installs the lowest Rollup 3 and runs `pnpm test`. Tests that need newer Rollup (`logLevel` and `onLog` in `src/rollup.test.ts` arrived in 3.25) must be gated or skipped first, so a red run reflects the plugin and not the suite. If the plugin itself fails, narrow the peer range instead of leaving it unverified.
 2. **The on-disk cache inside a real build.** `cache` is tested only through `resolveDependency` and `src/load.test.ts`, never inside a `rollup()` build (the `import.meta.url` rebuild test uses Rollup's own `cache`, not the plugin option); add a `rollup()` build in `src/rollup.test.ts` that fills the cache, then builds again with a `fetchImpl` that throws and expects the same output.
-3. **Multiple entry points and CJS output.** Add one `rollup()` build with two entries sharing a CDN module (one chunk, one fetch) and one with `format: "cjs"`, both in `src/rollup.test.ts`.
+3. **Multiple entry points and CJS output.** Done in the branch that added these builds. Add one `rollup()` build with two entries sharing a CDN module (one chunk, one fetch) and one with `format: "cjs"`, both in `src/rollup.test.ts`.
 4. **Watch mode.** `buildStart` clears the memo, `moduleUrls` and `modulesByUrl`; add a `rollup.watch` test that a rebuild refetches, still resolves relative imports and still dedupes a module reached by name and by URL.
 5. **`bundle.write()`.** Cover it with the multi-entry build from item 3 so output reaches disk without a second fetch.
 
