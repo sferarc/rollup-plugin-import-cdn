@@ -346,6 +346,7 @@ describe("Rollup build", () => {
 		expect(holders).toHaveLength(1);
 		expect(holders[0]?.isEntry).toBe(false);
 		expect(fetchCounts()).toEqual({ [DIRECT]: 1 });
+		expect(chunks.map((chunk) => chunk.code).join("\n")).not.toMatch(/https?:\/\//);
 	});
 
 	it("builds CDN modules into CommonJS output", async () => {
