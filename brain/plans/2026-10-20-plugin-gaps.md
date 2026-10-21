@@ -6,7 +6,7 @@ Triage of the gaps in [[architecture/overview]] ("Things the code does not do") 
 
 Cheapest and they guard the options users already rely on.
 
-1. **Rollup 3 in CI.** `package.json` accepts `rollup` `^3.0.0 || ^4.0.0`, but the suite only runs against the catalog pin. Add a CI job or matrix leg that installs the lowest Rollup 3 and runs `pnpm test`. Tests that need newer Rollup (`logLevel` and `onLog` in `src/rollup.test.ts` arrived in 3.25) must be gated or skipped first, so a red run reflects the plugin and not the suite. If the plugin itself fails, narrow the peer range instead of leaving it unverified.
+1. **Rollup 3 in CI.** Done: the `Test (Rollup 3.0)` job runs the suite on Rollup 3.0.0 and the plugin passes, so the peer range stays. See [[development/ci]].
 2. **The on-disk cache inside a real build.** Done: `src/rollup.test.ts` fills `cache` in one `rollup()` build, then rebuilds with a `fetchImpl` that throws and expects byte-identical output.
 3. **Multiple entry points and CJS output.** Done: `src/rollup.test.ts` has a two-entry build where a shared CDN module lands in one non-entry chunk and is fetched once, and a `format: "cjs"` build with no `import`, `export` or URL left.
 4. **Watch mode.** `buildStart` clears the memo, `moduleUrls` and `modulesByUrl`; add a `rollup.watch` test that a rebuild refetches, still resolves relative imports and still dedupes a module reached by name and by URL.

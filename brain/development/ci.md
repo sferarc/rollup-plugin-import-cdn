@@ -1,6 +1,6 @@
 # CI
 
-`.github/workflows/ci.yml` runs on pushes to `main` and on every pull request. Two jobs, `Check` and `Test (minimum Node)`, both on `ubuntu-latest`: the repository is public, so it uses GitHub-hosted runners (comment in the workflow).
+`.github/workflows/ci.yml` runs on pushes to `main` and on every pull request. Three jobs, `Check`, `Test (minimum Node)` and `Test (Rollup 3.0)`, all on `ubuntu-latest`: the repository is public, so it uses GitHub-hosted runners (comment in the workflow).
 
 ## Check steps
 
@@ -30,9 +30,15 @@ Until the runner is fixed, shifts leave `pnpm build` and `pnpm is-tree-shakable`
 
 The fix does not live in this repository: the shift workflow has to set `SWC_NATIVE_BINDING_CACHE` to a per-job temp directory. A change doing that is prepared but not merged, and it is unverified on a live runner. Once it has merged and a shift has run `pnpm build` successfully, drop the workaround above and let shifts run all seven checks of `pnpm check`.
 
+## Rollup 3 job
+
+`Test (Rollup 3.0)` installs the lowest Rollup the peer range accepts and runs `pnpm test`. `catalogMode: strict` rejects `pnpm add rollup@3.0.0`, so the job rewrites the `rollup` line of `pnpm-workspace.yaml` with `sed`, runs `pnpm install --no-frozen-lockfile` and asserts `rollup --version` is 3.0.0. Nothing is committed, so the catalog pin stays on Rollup 4. It does not lint, typecheck or build (`tsc` fails on Rollup 3.0.0 over `logLevel`, `onLog` and `attributes`, so do not add a typecheck step here), and it is a separate job so it adds no time to `Check`.
+
+The suite passed on Rollup 3.0.0 apart from the `onLog` test, which `src/rollup.test.ts` skips below 3.25 (`it.skipIf` on `VERSION` from `rollup`). No change to the peer range was needed. Run it locally the same way: edit the catalog line, `pnpm install --no-frozen-lockfile`, `pnpm exec vitest run`, then `git checkout pnpm-workspace.yaml pnpm-lock.yaml`.
+
 ## Branch rules on `main`
 
-The `main-default` ruleset, read from the GitHub API on 2026-10-08: `Check` is the one required status check, changes go through pull requests with squash or rebase merges, history is linear, and force pushes and deletion are blocked. That reading predates `Test (minimum Node)`; whether the ruleset now requires it too is unknown until the ruleset is read again.
+The `main-default` ruleset, read from the GitHub API on 2026-10-08: `Check` is the one required status check, changes go through pull requests with squash or rebase merges, history is linear, and force pushes and deletion are blocked. That reading predates `Test (minimum Node)` and `Test (Rollup 3.0)`; whether the ruleset now requires either is unknown until the ruleset is read again.
 
 ## Related
 
