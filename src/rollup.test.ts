@@ -47,9 +47,9 @@ const cdn: Record<string, { url?: string; body: string }> = {
 	},
 };
 
-function mockCdn() {
+function mockCdn(extra: typeof cdn = {}) {
 	const fetchImpl = vi.fn<FetchImpl>(async (url) => {
-		const entry = cdn[url];
+		const entry = extra[url] ?? cdn[url];
 		return {
 			ok: entry !== undefined,
 			status: entry ? 200 : 404,
@@ -281,6 +281,47 @@ describe("Rollup build", () => {
 
 		expect(second).toBe(first);
 		expect(Object.values(fetchCounts())).toEqual([2, 2, 2, 2, 2]);
+	});
+
+	it("rebuilds from the on-disk cache with a fetchImpl that throws", async () => {
+		const { fetchImpl: pinnedFetch, fetchCounts } = mockCdn({
+			"https://cdn.skypack.dev/pkg-a@1.0.0": cdn[PKG_A]!,
+			"https://cdn.skypack.dev/pkg-b@1.0.0": cdn[PKG_B]!,
+		});
+		const cacheDir = path.join(dir, "cache");
+		const versions = { "pkg-a": "1.0.0", "pkg-b": "1.0.0" };
+		const pinnedEntry = path.join(dir, "pinned.js");
+		await writeFile(
+			pinnedEntry,
+			[
+				'import { used } from "pkg-a";',
+				'import { b } from "pkg-b";',
+				"console.log(used(), b);",
+			].join("\n"),
+		);
+
+		const first = await build({
+			input: pinnedEntry,
+			plugins: [importCdn({ fetchImpl: pinnedFetch, cache: cacheDir, versions })],
+		});
+		expect(Object.keys(fetchCounts()).sort()).toEqual([
+			"https://cdn.skypack.dev/-/pkg-a@1.0.0/dist/helper.js",
+			"https://cdn.skypack.dev/-/shared@1.0.0/index.js",
+			"https://cdn.skypack.dev/pkg-a@1.0.0",
+			"https://cdn.skypack.dev/pkg-b@1.0.0",
+		]);
+
+		const offline = vi.fn<FetchImpl>(async () => {
+			throw new Error("The cache should have served every URL");
+		});
+		const second = await build({
+			input: pinnedEntry,
+			plugins: [importCdn({ fetchImpl: offline, cache: cacheDir, versions })],
+		});
+
+		expect(offline).not.toHaveBeenCalled();
+		expect(second).toBe(first);
+		expect(second).toContain('"HELPER"');
 	});
 
 	it.skipIf(!hasOnLog)("reports CDN network errors through Rollup's log handlers", async () => {
