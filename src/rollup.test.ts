@@ -326,6 +326,47 @@ describe("Rollup build", () => {
 		expect(message).toContain("https://mirror.test/missing: HTTP 404");
 	});
 
+	it("puts a CDN module shared by two entries in one chunk and fetches it once", async () => {
+		const { fetchImpl, fetchCounts } = mockCdn();
+		const second = path.join(dir, "second.js");
+		await writeFile(entry, `import { direct } from "${DIRECT}";\nconsole.log("A", direct);`);
+		await writeFile(second, `import { direct } from "${DIRECT}";\nconsole.log("B", direct);`);
+
+		const bundle = await rollup({
+			input: [entry, second],
+			onwarn: (warning) => expect.fail(warning.message),
+			plugins: [importCdn({ fetchImpl })],
+		});
+		const { output } = await bundle.generate({ format: "es" });
+		await bundle.close();
+
+		const chunks = output.filter((item) => item.type === "chunk");
+		expect(chunks).toHaveLength(3);
+		const holders = chunks.filter((chunk) => chunk.code.includes('"DIRECT"'));
+		expect(holders).toHaveLength(1);
+		expect(holders[0]?.isEntry).toBe(false);
+		expect(fetchCounts()).toEqual({ [DIRECT]: 1 });
+		expect(chunks.map((chunk) => chunk.code).join("\n")).not.toMatch(/https?:\/\//);
+	});
+
+	it("builds CDN modules into CommonJS output", async () => {
+		const { fetchImpl } = mockCdn();
+		const bundle = await rollup({
+			input: entry,
+			onwarn: (warning) => expect.fail(warning.message),
+			plugins: [importCdn({ fetchImpl })],
+		});
+		const { output } = await bundle.generate({ format: "cjs" });
+		await bundle.close();
+
+		expect(output).toHaveLength(1);
+		const code = output[0]?.type === "chunk" ? output[0].code : "";
+		for (const marker of ['"HELPER"', '"SHARED"', '"PKG_B"', '"DIRECT"', '"LOCAL"']) {
+			expect(code).toContain(marker);
+		}
+		expect(code).not.toMatch(/\b(?:import|export)\b|https?:\/\//);
+	});
+
 	const integrityFor = (body: string) => ({
 		[DIRECT]: `sha384-${createHash("sha384").update(body).digest("base64")}`,
 	});
