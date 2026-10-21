@@ -1,6 +1,6 @@
 # Plugin gaps, next fixes
 
-Triage of the gaps in [[architecture/overview]] ("Things the code does not do") and the non-coverage in [[development/testing]], read on 2026-10-20 at `f64db93`. Each item is one small pull request. Order is by risk to users, then by cost. Items 1 to 5 and 7 are done; 6 and 8 are not started.
+Triage of the gaps in [[architecture/overview]] ("Things the code does not do") and the non-coverage in [[development/testing]], read on 2026-10-20 at `f64db93`. Each item is one small pull request. Order is by risk to users, then by cost. Items 1 to 5, 7 and 8 are done; 6 is not started.
 
 ## Test gaps first
 
@@ -16,7 +16,7 @@ Cheapest and they guard the options users already rely on.
 
 6. **Only `skypack` is built in.** `availableCDNs` has one name, so every other CDN needs a `priority` function. Decide whether to add named entries (candidates: `esm.sh`, `jsdelivr`) or document the function form in `README.md`. Adding a name changes the option surface, so check it against [[architecture/resolution]] first.
 7. **Unverified fetched code.** Done since #41: the "Integrity" section of `README.md` has a `curl` and `openssl` recipe whose output equals the `sha384` digest the plugin computes (checked on 2026-10-21), and a mismatch error prints the actual digest. A helper is not needed.
-8. **Node only.** Node built-ins load at import time in `src/load.ts` (`node:crypto`, `node:fs/promises`, `node:path`), `src/integrity.ts` (`node:crypto`) and `src/index.ts` (`node:fs`, `node:module`, `node:path`). Running outside Node means moving the cache behind a lazy import, using WebCrypto for integrity, and replacing the entry stat and builtin list in `src/index.ts`. Worth doing only if someone asks; record the decision in `brain/decisions/` either way.
+8. **Node only.** Done: Node built-ins load at import time in `src/load.ts` (`node:crypto`, `node:fs/promises`, `node:path`), `src/integrity.ts` (`node:crypto`) and `src/index.ts` (`node:fs`, `node:module`, `node:path`). Running outside Node means moving the cache behind a lazy import, using WebCrypto for integrity, and replacing the entry stat and builtin list in `src/index.ts`. Decided on 2026-10-21 not to do this until someone asks: [[decisions/2026-10-21-node-only]].
 
 ## Not planned
 
