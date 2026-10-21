@@ -37,6 +37,7 @@ const withVersion = (key: string, version?: string) => {
 
 const parseCDN: Record<AvailableCDNs, (key: string, version?: string) => string> = {
 	skypack: (key, version) => `https://cdn.skypack.dev/${withVersion(key, version)}`,
+	"esm.sh": (key, version) => `https://esm.sh/${withVersion(key, version)}`,
 };
 
 function pinnedVersion(key: string, versions: PluginOptions["versions"]) {
