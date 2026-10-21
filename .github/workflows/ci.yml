@@ -77,7 +77,7 @@ jobs:
       - name: Test
         run: pnpm test
 
-  # Runs the suite on the lowest Rollup the peer range accepts. Not required.
+  # Runs the suite on the lowest Rollup the peer range accepts.
   rollup-3:
     name: Test (Rollup 3.0)
     runs-on: ubuntu-latest
@@ -86,7 +86,7 @@ jobs:
 
       - uses: jdx/mise-action@fc42bcc7ddbf51124c30f95a877a0c5168a3bfde # v5.2.1
 
-      # catalogMode is strict, so the pin is rewritten in the workspace file and the lockfile is regenerated. Neither is committed.
+      # catalogMode is strict, so the catalog pin is rewritten and the lockfile regenerated.
       - name: Pin Rollup to the peer range floor
         run: |
           sed -i 's/^  rollup: .*/  rollup: 3.0.0/' pnpm-workspace.yaml

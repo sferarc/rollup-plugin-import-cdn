@@ -32,7 +32,7 @@ The fix does not live in this repository: the shift workflow has to set `SWC_NAT
 
 ## Rollup 3 job
 
-`Test (Rollup 3.0)` installs the lowest Rollup the peer range accepts and runs `pnpm test`. `catalogMode: strict` rejects `pnpm add rollup@3.0.0`, so the job rewrites the `rollup` line of `pnpm-workspace.yaml` with `sed`, runs `pnpm install --no-frozen-lockfile` and asserts `rollup --version` is 3.0.0. Nothing is committed, so the catalog pin stays on Rollup 4. It does not lint, typecheck or build, and it is a separate job so it adds no time to `Check`.
+`Test (Rollup 3.0)` installs the lowest Rollup the peer range accepts and runs `pnpm test`. `catalogMode: strict` rejects `pnpm add rollup@3.0.0`, so the job rewrites the `rollup` line of `pnpm-workspace.yaml` with `sed`, runs `pnpm install --no-frozen-lockfile` and asserts `rollup --version` is 3.0.0. Nothing is committed, so the catalog pin stays on Rollup 4. It does not lint, typecheck or build (`tsc` fails on Rollup 3.0.0 over `logLevel`, `onLog` and `attributes`, so do not add a typecheck step here), and it is a separate job so it adds no time to `Check`.
 
 The suite passed on Rollup 3.0.0 apart from the `onLog` test, which `src/rollup.test.ts` skips below 3.25 (`it.skipIf` on `VERSION` from `rollup`). No change to the peer range was needed. Run it locally the same way: edit the catalog line, `pnpm install --no-frozen-lockfile`, `pnpm exec vitest run`, then `git checkout pnpm-workspace.yaml pnpm-lock.yaml`.
 
