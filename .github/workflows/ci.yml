@@ -76,3 +76,24 @@ jobs:
 
       - name: Test
         run: pnpm test
+
+  # Runs the suite on the lowest Rollup the peer range accepts.
+  rollup-3:
+    name: Test (Rollup 3.0)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: jdx/mise-action@fc42bcc7ddbf51124c30f95a877a0c5168a3bfde # v5.2.1
+
+      # catalogMode is strict, so the catalog pin is rewritten and the lockfile regenerated.
+      - name: Pin Rollup to the peer range floor
+        run: |
+          sed -i 's/^  rollup: .*/  rollup: 3.0.0/' pnpm-workspace.yaml
+
+      - run: pnpm install --no-frozen-lockfile
+
+      - run: test "$(pnpm exec rollup --version)" = "rollup v3.0.0"
+
+      - name: Test
+        run: pnpm test
