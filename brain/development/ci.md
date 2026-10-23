@@ -24,11 +24,9 @@ Actions are pinned to full commit SHAs with the version in a trailing comment, w
 
 ## Shift runner and the SWC cache
 
-On the self-hosted shift runner, `pnpm build` fails before reaching the source: `@swc/core` refuses to load its native addon with `ERR_SWC_NATIVE_CACHE` because `/home/runner/.cache` has a parent writable by another user without trusted sticky protection. `pnpm is-tree-shakable` then fails with "No entry point" because there is no `dist/` (issue #5). GitHub-hosted CI is not affected.
+On the self-hosted shift runner, `pnpm build` used to fail before reaching the source: `@swc/core` refused to load its native addon with `ERR_SWC_NATIVE_CACHE` because `/home/runner/.cache` had a parent writable by another user without trusted sticky protection, and `pnpm is-tree-shakable` then failed with "No entry point" because there was no `dist/` (issue #5). GitHub-hosted CI was not affected.
 
-Until the runner is fixed, shifts leave `pnpm build` and `pnpm is-tree-shakable` to CI's `Check` job and run the other checks locally.
-
-The fix does not live in this repository: the shift workflow has to set `SWC_NATIVE_BINDING_CACHE` to a per-job temp directory. A change doing that is prepared but not merged, and it is unverified on a live runner. Once it has merged and a shift has run `pnpm build` successfully, drop the workaround above and let shifts run all seven checks of `pnpm check`.
+On 2026-10-23 a brain-maintenance shift ran all seven checks of `pnpm check` on the shift runner, `pnpm build` and `pnpm is-tree-shakable` included, and all passed. Shifts run the whole of `pnpm check` again. Which change fixed it, the shift workflow setting `SWC_NATIVE_BINDING_CACHE` or a change to the runner, is unknown from this repository. If `ERR_SWC_NATIVE_CACHE` comes back, the fix belongs in the shift workflow, not here.
 
 ## Rollup 3 job
 
