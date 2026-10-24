@@ -1,6 +1,6 @@
 # Architecture
 
-The plugin is a Rollup plugin with three hooks, `buildStart`, `resolveId` and `load`, over about 540 lines of non-test source in `src/` on 2026-10-16 (`index.ts`, `load.ts`, `integrity.ts`, `types.ts`). Start with [[overview]].
+The plugin is a Rollup plugin with three hooks, `buildStart`, `resolveId` and `load`, over about 610 lines of non-test source in `src/` on 2026-10-23 (`index.ts`, `load.ts`, `integrity.ts`, `types.ts`). Start with [[overview]].
 
 ## Start here
 

@@ -24,7 +24,7 @@ Before this repository existed the plugin lived in the SferaDev/SferaDev monorep
 
 ## First release
 
-On 2026-10-20 `changeset status` over the pending changesets reports one `minor` bump for `rollup-plugin-import-cdn`, so the first run with `RELEASE_ENABLED` on opens a version pull request for `0.4.0`.
+On 2026-10-23 the 33 pending changesets in `.changeset/` (every `.md` file there but `README.md`) are all `minor` or `patch` (the `minor` ones are `fetch-cache.md`, `fetch-timeout.md`, `integrity-option.md` and `esm-sh-builtin.md`), and `changeset status` reports one `minor` bump for `rollup-plugin-import-cdn`, so the first run with `RELEASE_ENABLED` on opens a version pull request for `0.4.0`.
 
 The tag format is `v<version>`, for example `v0.4.0`. `@changesets/cli` tags `<name>@<version>` only for monorepo tools and `v<version>` for a `root` tool (`gitTags.mjs`), and `@manypkg/get-packages` reports this repository as `root`. The older `rollup-plugin-import-cdn@0.3.x` tags came from the monorepo.
 

@@ -25,4 +25,4 @@ Cheapest and they guard the options users already rely on.
 
 ## Open
 
-- Whether the first release happens before or after items 1 to 3 waits on the owner ([[decisions/2026-10-08-release-off-until-enabled]]).
+Nothing. Items 1 to 3 merged before any release, so the question of releasing before or after them no longer applies. The first release still waits on the owner ([[decisions/2026-10-08-release-off-until-enabled]], [[development/release]]).
