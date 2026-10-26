@@ -132,6 +132,8 @@ Under `vite dev`, a fetched package is served by the dev server at `/@id/<name>`
 
 `importCdn()` is typed as a Rollup plugin, which Vite 8's `Plugin` type does not accept, so a TypeScript config needs a cast such as `importCdn() as unknown as PluginOption`.
 
+`vite build --watch` rebuilds through the plugin like a fresh build: every CDN module is fetched again on each rebuild, as under `rollup --watch`. Set `cache` to read pinned URLs from disk instead.
+
 ## Documentation
 
 This README is the reference for the plugin's options and behaviour. The [CHANGELOG](CHANGELOG.md) lists changes by release.
