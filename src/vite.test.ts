@@ -1,7 +1,7 @@
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { build, type Plugin } from "vite";
+import { build, type Plugin, type Rolldown } from "vite";
 import { afterEach, beforeEach, describe, expect, it, type MockInstance, vi } from "vitest";
 import { importCdn } from "./index";
 import type { FetchImpl } from "./types";
@@ -129,5 +129,69 @@ describe("Vite build", () => {
 
 		expect(code).toContain('"VIRTUAL"');
 		expect(fetchImpl).not.toHaveBeenCalled();
+	});
+
+	it("rebuilds under vite build --watch, refetching and bundling a newly added URL import", async () => {
+		const fetchImpl = mockCdn();
+		await writeFile(
+			path.join(root, "main.js"),
+			'import { used } from "pkg-a";\nconsole.log(used(), "V1");',
+		);
+		const watcher = (await build({
+			root,
+			configFile: false,
+			logLevel: "silent",
+			build: { watch: {}, minify: false },
+			plugins: [cdnPlugin(fetchImpl)],
+		})) as Rolldown.RolldownWatcher;
+		const nextEnd = () =>
+			new Promise<void>((resolve, reject) => {
+				const onEvent = (event: Rolldown.RolldownWatcherEvent) => {
+					if (event.code === "BUNDLE_END") void event.result.close();
+					if (event.code !== "END" && event.code !== "ERROR") return;
+					watcher.off("event", onEvent);
+					if (event.code === "ERROR") reject(event.error);
+					else resolve();
+				};
+				watcher.on("event", onEvent);
+			});
+		const readOutput = async () => {
+			const assets = path.join(root, "dist", "assets");
+			const files = (await readdir(assets)).filter((file) => file.endsWith(".js"));
+			const code = await Promise.all(
+				files.map((file) => readFile(path.join(assets, file), "utf8")),
+			);
+			return code.join("\n");
+		};
+
+		try {
+			await nextEnd();
+			const first = await readOutput();
+			expect(first).toContain('"V1"');
+			expect(first).toContain('"HELPER"');
+			expect(fetchImpl).toHaveBeenCalledTimes(3);
+
+			const rebuilt = nextEnd();
+			await writeFile(
+				path.join(root, "main.js"),
+				`import { used } from "pkg-a";\nimport { direct } from "${DIRECT}";\nconsole.log(used(), direct, "V2");`,
+			);
+			await rebuilt;
+
+			const second = await readOutput();
+			for (const marker of ['"V2"', '"HELPER"', '"PKG_B"', '"DIRECT"'])
+				expect(second).toContain(marker);
+			expect(second).not.toContain('"V1"');
+			expect(second).not.toMatch(/\bfrom\s*["']https?:/);
+			// buildStart clears the per-build memo, so the rebuild fetches pkg-a's graph again.
+			expect(
+				fetchImpl.mock.calls
+					.slice(3)
+					.map(([url]) => url)
+					.sort(),
+			).toEqual([DIRECT, HELPER, PKG_A, PKG_B].sort());
+		} finally {
+			await watcher.close();
+		}
 	});
 });
