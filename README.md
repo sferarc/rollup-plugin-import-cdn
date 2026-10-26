@@ -6,7 +6,7 @@ Import ESM modules from URLs for local processing by Rollup, enabling tree-shaki
 
 - **CDN Imports** - Import npm packages directly from CDN URLs
 - **Tree-shaking** - Full tree-shaking support for CDN modules
-- **Multiple CDNs** - Skypack and esm.sh built in, with custom CDN fallback chains
+- **Multiple CDNs** - Skypack, esm.sh and jsDelivr built in, with custom CDN fallback chains
 - **Version Pinning** - Pin specific package versions for reproducible builds
 
 ## Installation
@@ -44,7 +44,7 @@ import confetti from "https://esm.sh/canvas-confetti";
 | `cache` | none | Directory for an on-disk cache of responses from pinned URLs. See [Fetch Cache](#fetch-cache). |
 | `fetchImpl` | global `fetch` | Function used for every request: `(url, { signal }) => Promise<{ ok, status, url, text() }>`; `signal` is passed only while `timeout` is enabled. `importCdn` throws `No fetch implementation found` when it is not set and no global `fetch` exists, and throws when it is set to anything other than a function. |
 | `integrity` | none | SRI hashes that fetched code must match, keyed by URL. See [Integrity](#integrity). |
-| `priority` | `["skypack"]` | CDNs to try, in order. Each entry is `"skypack"`, `"esm.sh"` or a function returning a URL; any other entry throws when the plugin is created. See [Custom CDN](#custom-cdn). |
+| `priority` | `["skypack"]` | CDNs to try, in order. Each entry is `"skypack"`, `"esm.sh"`, `"jsdelivr"` or a function returning a URL; any other entry throws when the plugin is created. See [Custom CDN](#custom-cdn). |
 | `timeout` | `30000` | Milliseconds each request may take, reading the body included, before it counts as a network error and the next CDN is tried. A failed or timed-out URL is not retried until the next build. `0` disables it; the largest accepted value is `2147483647`, the longest delay Node's `setTimeout` holds. The plugin aborts the `signal` it passes to `fetchImpl` and stops waiting even if `fetchImpl` ignores it. |
 | `versions` | none | Versions to pin, keyed by package name or full specifier. See [Version Pinning](#version-pinning). |
 
@@ -61,7 +61,9 @@ importCdn({
 
 A version set for a package also applies to its subpaths, and goes after the package name: with `versions: { "react-dom": "18.2.0" }`, `import "react-dom/client"` fetches `https://cdn.skypack.dev/react-dom@18.2.0/client`. Scoped packages work the same way, so `@scope/pkg/sub` with `"@scope/pkg": "1.0.0"` fetches `https://cdn.skypack.dev/@scope/pkg@1.0.0/sub`. An entry for the full specifier, such as `"react-dom/client"`, takes precedence over the package entry. A specifier that carries its own version, such as `react@17/jsx-runtime`, ignores `versions`.
 
-The built-in `"skypack"` and `"esm.sh"` entries apply the pin to their URLs. A custom `priority` function receives the version as its second argument and decides how to use it.
+The built-in `"skypack"`, `"esm.sh"` and `"jsdelivr"` entries apply the pin to their URLs. A custom `priority` function receives the version as its second argument and decides how to use it.
+
+`"jsdelivr"` requests jsDelivr's ESM build, so `react-dom/client` pinned to `18.2.0` fetches `https://cdn.jsdelivr.net/npm/react-dom@18.2.0/client/+esm`. jsDelivr serves an unpinned package without redirecting to a version, while the modules it serves import their dependencies at an exact version, such as `/npm/react@19.3.1/+esm`. Pin every package you import through `"jsdelivr"`: otherwise `import "react"` and the React that `react-dom` imports are two URLs, and the bundle holds two copies.
 
 ### Fetch Cache
 
@@ -88,6 +90,8 @@ importCdn({
 ```
 
 Each entry maps a URL to a [Subresource Integrity](https://developer.mozilla.org/en-US/docs/Web/Security/Subresource_Integrity) value: `sha256-`, `sha384-` or `sha512-` followed by the base64 digest of the module source. The key can be the URL the plugin requests or the URL the CDN redirects to. When the fetched source does not match, the build fails with the URL and the expected and actual digests; the plugin does not fall back to the next CDN. Several space-separated hashes are accepted, and as in browsers only those using the strongest listed algorithm count, any one of them matching. URLs without an entry are not checked, and an invalid value throws when the plugin is created.
+
+jsDelivr builds its `+esm` files on demand and advises against SRI for them, so a `"jsdelivr"` URL with an entry can fail the build after a rebuild on their side.
 
 Compute a hash from the exact URL the plugin fetches:
 

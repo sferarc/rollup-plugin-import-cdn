@@ -250,6 +250,35 @@ describe("Rollup build", () => {
 		expect(code).toContain("console.log(used === used);");
 	});
 
+	it("bundles a jsdelivr package once when versions pins it to the path its dependents import", async () => {
+		const lib = "https://cdn.jsdelivr.net/npm/lib@1.0.0/+esm";
+		const libBody = 'export const state = { id: "LIB_STATE" };';
+		const { fetchImpl, fetchCounts } = mockCdn({
+			[lib]: { body: libBody },
+			"https://cdn.jsdelivr.net/npm/lib-dom@1.0.0/client/+esm": {
+				body: 'import { state } from "/npm/lib@1.0.0/+esm";\nexport const root = () => state;',
+			},
+		});
+		await writeFile(
+			entry,
+			[
+				'import { state } from "lib";',
+				'import { root } from "lib-dom/client";',
+				"console.log(root() === state);",
+			].join("\n"),
+		);
+		const plugin = importCdn({
+			fetchImpl,
+			priority: ["jsdelivr"],
+			versions: { lib: "1.0.0", "lib-dom": "1.0.0" },
+		});
+
+		const code = await build({ input: entry, plugins: [plugin] });
+
+		expect(code.match(/LIB_STATE/g)).toHaveLength(1);
+		expect(fetchCounts()[lib]).toBe(1);
+	});
+
 	it("keeps two modules served from one URL apart when their bodies differ", async () => {
 		await writeFile(
 			entry,

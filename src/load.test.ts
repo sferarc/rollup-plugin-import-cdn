@@ -150,6 +150,32 @@ describe("resolveDependency", () => {
 		},
 	);
 
+	it.each([
+		["react", {}, "react"],
+		["react-dom/client", { "react-dom": "18.2.0" }, "react-dom@18.2.0/client"],
+		["@scope/pkg/sub", { "@scope/pkg": "1.0.0" }, "@scope/pkg@1.0.0/sub"],
+		["react@17/jsx-runtime", { react: "18.2.0" }, "react@17/jsx-runtime"],
+	])("should build the jsdelivr URL for %s (%j)", async (key, versions, path) => {
+		const url = `https://cdn.jsdelivr.net/npm/${path}/+esm`;
+		const options: PluginOptions = {
+			fetchImpl: createMockFetch({ [url]: "export {};" }),
+			priority: ["jsdelivr"],
+			versions,
+		};
+
+		expect((await resolveDependency(key, options))?.url).toBe(url);
+	});
+
+	it.each(["virtual:x", "#internal", "HTTPS://example.com/x.js"])(
+		"should not request %s from jsdelivr",
+		async (key) => {
+			const fetchImpl = vi.fn(createMockFetch({}));
+
+			expect(await resolveDependency(key, { fetchImpl, priority: ["jsdelivr"] })).toBeNull();
+			expect(fetchImpl).not.toHaveBeenCalled();
+		},
+	);
+
 	it("should pass the pinned version to a custom CDN resolver", async () => {
 		const priority = vi.fn((key: string, version?: string) => `https://esm.sh/${key}?v=${version}`);
 		const options: PluginOptions = {
@@ -733,6 +759,7 @@ describe("resolveDependency cache", () => {
 		"pkg@1.2.3+build",
 		"pkg@1.2.3-rc.1+build.5/sub.js",
 		"pkg@1.2.3?dev",
+		"npm/pkg@1.2.3/+esm",
 	])("should cache the pinned URL %s", async (specifier) => {
 		const calls: string[] = [];
 		const options: PluginOptions = { cache, fetchImpl: countingFetch(calls) };
