@@ -69,6 +69,7 @@
 		"lefthook": "catalog:",
 		"rollup": "catalog:",
 		"typescript": "catalog:",
+		"vite": "catalog:",
 		"vitest": "catalog:"
 	},
 	"publishConfig": {

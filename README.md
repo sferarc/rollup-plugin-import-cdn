@@ -124,6 +124,12 @@ A custom function receives the specifier as written and, as its second argument,
 - **Transitive imports.** Relative, root-relative and protocol-relative static imports inside a CDN module are rewritten to absolute URLs, resolved against the URL the module was served from. Bare imports are left as written and go back through the plugin, so `versions` and `priority` apply to transitive dependencies too.
 - **Dynamic imports.** A relative `import("./chunk.js")` inside a CDN module is resolved against the URL the module was served from, after redirects.
 
+## Vite
+
+`importCdn()` also works as a Vite plugin for `vite build`, tested with Vite 8. It sets `enforce: "pre"`, since Vite's own resolver marks every URL import external; for a bare name it asks Vite's resolver first, so a package installed in `node_modules` is used from there and only names Vite cannot resolve are fetched. Inside CDN modules, `import.meta.url` is not rewritten to the CDN URL under Vite. The dev server is untested.
+
+`importCdn()` is typed as a Rollup plugin, which Vite 8's `Plugin` type does not accept, so a TypeScript config needs a cast such as `importCdn() as unknown as PluginOption`.
+
 ## Documentation
 
 This README is the reference for the plugin's options and behaviour. The [CHANGELOG](CHANGELOG.md) lists changes by release.
