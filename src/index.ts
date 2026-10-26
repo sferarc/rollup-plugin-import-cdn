@@ -132,7 +132,10 @@ function contextLogger(context: PluginContext): Logger {
 	};
 }
 
-export function importCdn(pluginOptions: ImportCdnOptions = {}): RollupPlugin {
+// Vite runs its own resolver before unordered plugins, and it marks every URL import external.
+type ImportCdnPlugin = RollupPlugin & { enforce: "pre"; configResolved(): void };
+
+export function importCdn(pluginOptions: ImportCdnOptions = {}): ImportCdnPlugin {
 	validateOptions(pluginOptions);
 
 	const globalFetch = typeof fetch !== "undefined" ? fetch : undefined;
@@ -175,14 +178,21 @@ export function importCdn(pluginOptions: ImportCdnOptions = {}): RollupPlugin {
 
 	const options = { ...pluginOptions, fetchImpl };
 
+	// Set by the Vite-only `configResolved` hook; Rollup never calls it.
+	let isVite = false;
+
 	return {
 		name: "plugin-import-cdn",
+		enforce: "pre",
+		configResolved() {
+			isVite = true;
+		},
 		buildStart() {
 			responses.clear();
 			moduleUrls.clear();
 			modulesByUrl.clear();
 		},
-		async resolveId(key: string, importer?: string) {
+		async resolveId(key, importer, resolveOptions) {
 			const importerUrl =
 				importer === undefined
 					? undefined
@@ -196,6 +206,10 @@ export function importCdn(pluginOptions: ImportCdnOptions = {}): RollupPlugin {
 			} else if (importer === undefined && !isHttpUrl(key) && isLocalEntry(key)) {
 				// An entry such as `input: "src/index.js"` is a path relative to cwd, not a package.
 				return;
+			} else if (isVite && !isHttpUrl(key)) {
+				// Running before Vite's resolver, so installed packages and Vite's own ids still win.
+				const resolved = await this.resolve(key, importer, { ...resolveOptions, skipSelf: true });
+				if (resolved) return resolved;
 			}
 
 			const dependency = await resolveDependency(key, options, contextLogger(this));
@@ -207,8 +221,9 @@ export function importCdn(pluginOptions: ImportCdnOptions = {}): RollupPlugin {
 			moduleUrls.set(dependency.name, dependency.url);
 			return dependency.name;
 		},
-		async load(key: string) {
-			if (isForeignId(key)) return;
+		async load(key) {
+			// Under Vite this load runs first for every id, including other plugins' unprefixed virtual ids.
+			if (isForeignId(key) || (isVite && !moduleUrls.has(key))) return;
 			const dependency = await resolveDependency(key, options, contextLogger(this));
 			if (!dependency) return;
 			// A rebuild from Rollup's cache reuses resolved ids and skips resolveId, but not load.
