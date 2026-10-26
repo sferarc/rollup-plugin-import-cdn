@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { mkdir, mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -278,6 +278,75 @@ describe("resolveDependency", () => {
 		const result = await resolveDependency("pkg", options);
 
 		expect(result?.url).toBe("https://good.test/pkg");
+	});
+
+	describe("Skypack build errors", () => {
+		const errorUrl = "https://cdn.skypack.dev/error/build:vue@v3.4.0-5WYbVKWEJJmTff41AxMV";
+		const skypackFetch =
+			(calls: string[] = []): FetchImpl =>
+			async (url) => {
+				calls.push(url);
+				return url.startsWith("https://cdn.skypack.dev/")
+					? { ok: true, url: errorUrl, text: async () => 'throw new Error("[Package Error]");' }
+					: { ok: true, url, text: async () => "export default 1;" };
+			};
+
+		it("should fall back to the next CDN when Skypack redirects to a build error", async () => {
+			const result = await resolveDependency("vue", {
+				fetchImpl: skypackFetch(),
+				priority: ["skypack", "esm.sh"],
+			});
+
+			expect(result).toEqual({ name: "vue", url: "https://esm.sh/vue", main: "export default 1;" });
+		});
+
+		it("should fail naming the error URL when no other CDN is configured", async () => {
+			await expect(resolveDependency("vue", { fetchImpl: skypackFetch() })).rejects.toThrow(
+				`Failed to fetch vue from https://cdn.skypack.dev/vue: Skypack could not build the package (${errorUrl})`,
+			);
+		});
+
+		it("should fail on a direct import of the error URL", async () => {
+			await expect(resolveDependency(errorUrl, { fetchImpl: skypackFetch() })).rejects.toThrow(
+				"Skypack could not build the package",
+			);
+		});
+
+		it.each([
+			"https://cdn.skypack.dev/error",
+			"https://cdn.skypack.dev/error/index.js",
+			"https://esm.sh/error/build:x",
+		])("should keep %s, which is not a Skypack build error", async (url) => {
+			const fetchImpl: FetchImpl = async () => ({ ok: true, url, text: async () => "export {};" });
+
+			expect((await resolveDependency(url, { fetchImpl }))?.url).toBe(url);
+		});
+
+		it("should neither cache a build error nor use one cached earlier", async () => {
+			const cache = await mkdtemp(path.join(tmpdir(), "import-cdn-cache-"));
+			try {
+				const calls: string[] = [];
+				const options: PluginOptions = {
+					cache,
+					fetchImpl: skypackFetch(calls),
+					priority: ["skypack", "esm.sh"],
+					versions: { vue: "3.4.0" },
+				};
+				const stale = path.join(
+					cache,
+					`${createHash("sha256").update("https://cdn.skypack.dev/vue@3.4.0").digest("hex")}.json`,
+				);
+				await writeFile(stale, JSON.stringify({ url: errorUrl, main: "throw 1;" }));
+
+				const result = await resolveDependency("vue", options);
+
+				expect(result?.url).toBe("https://esm.sh/vue@3.4.0");
+				expect(calls).toEqual(["https://cdn.skypack.dev/vue@3.4.0", "https://esm.sh/vue@3.4.0"]);
+				expect(JSON.parse(await readFile(stale, "utf8")).url).toBe(errorUrl);
+			} finally {
+				await rm(cache, { recursive: true, force: true });
+			}
+		});
 	});
 
 	it("should report a network error at debug level and try the next CDN", async () => {
