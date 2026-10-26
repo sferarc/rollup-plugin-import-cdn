@@ -43,7 +43,7 @@ describe("importCdn", () => {
 
 		it("rejects an unknown CDN name in priority", () => {
 			expect(() => importCdn({ fetchImpl, priority: ["unpkg" as never] })).toThrow(
-				'[rollup-plugin-import-cdn] Unknown CDN "unpkg" in priority; expected one of: skypack, esm.sh, or a function (key) => url',
+				'[rollup-plugin-import-cdn] Unknown CDN "unpkg" in priority; expected one of: skypack, esm.sh, jsdelivr, or a function (key) => url',
 			);
 		});
 

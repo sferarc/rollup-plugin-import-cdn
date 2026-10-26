@@ -1,4 +1,4 @@
-export const availableCDNs = ["skypack", "esm.sh"] as const;
+export const availableCDNs = ["skypack", "esm.sh", "jsdelivr"] as const;
 
 export type AvailableCDNs = (typeof availableCDNs)[number];
 
