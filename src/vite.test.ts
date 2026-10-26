@@ -1,7 +1,7 @@
 import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { build, type Plugin, type Rolldown } from "vite";
+import { build, createServer, type Plugin, type Rolldown } from "vite";
 import { afterEach, beforeEach, describe, expect, it, type MockInstance, vi } from "vitest";
 import { importCdn } from "./index";
 import type { FetchImpl } from "./types";
@@ -192,6 +192,74 @@ describe("Vite build", () => {
 			).toEqual([DIRECT, HELPER, PKG_A, PKG_B].sort());
 		} finally {
 			await watcher.close();
+		}
+	});
+});
+
+describe("Vite dev server", () => {
+	let root: string;
+	let globalFetch: MockInstance<typeof fetch>;
+
+	const devServer = async (main: string, fetchImpl: FetchImpl) => {
+		await writeFile(path.join(root, "main.js"), main);
+		return createServer({
+			root,
+			configFile: false,
+			logLevel: "silent",
+			server: { middlewareMode: true, ws: false },
+			optimizeDeps: { noDiscovery: true },
+			plugins: [cdnPlugin(fetchImpl)],
+		});
+	};
+
+	beforeEach(async () => {
+		globalFetch = vi
+			.spyOn(globalThis, "fetch")
+			.mockRejectedValue(new Error("Tests must not use the global fetch"));
+		root = await mkdtemp(path.join(tmpdir(), "import-cdn-vite-dev-"));
+		await writeFile(
+			path.join(root, "index.html"),
+			'<script type="module" src="./main.js"></script>',
+		);
+	});
+
+	afterEach(async () => {
+		expect(globalFetch).not.toHaveBeenCalled();
+		await rm(root, { recursive: true, force: true });
+	});
+
+	it("serves a fetched package from the dev server and leaves URLs to the browser", async () => {
+		const server = await devServer(
+			`import { used } from "pkg-a";\nimport { direct } from "${DIRECT}";\nconsole.log(used(), direct);`,
+			mockCdn(),
+		);
+		try {
+			const main = await server.transformRequest("/main.js");
+			expect(main?.code).toContain('from "/@id/pkg-a"');
+			expect(main?.code).toContain(`from "${DIRECT}"`);
+
+			// The browser requests /@id/pkg-a, which the dev server transforms as the id pkg-a.
+			const pkgA = await server.transformRequest("pkg-a");
+			expect(pkgA?.code).toContain(`from "${HELPER}"`);
+			expect(pkgA?.code).toContain('from "/@id/pkg-b"');
+		} finally {
+			await server.close();
+		}
+	});
+
+	it("refetches a failed request on the next page load", async () => {
+		const cdnFetch = mockCdn();
+		const fetchImpl = vi.fn<FetchImpl>(async (url) => cdnFetch(url));
+		fetchImpl.mockRejectedValueOnce(new Error("ECONNRESET"));
+		const server = await devServer('import { b } from "pkg-b";\nconsole.log(b);', fetchImpl);
+		try {
+			await expect(server.transformRequest("/main.js")).rejects.toThrow(/pkg-b/);
+
+			const main = await server.transformRequest("/main.js");
+			expect(main?.code).toContain('from "/@id/pkg-b"');
+			expect(fetchImpl.mock.calls.map(([url]) => url)).toEqual([PKG_B, PKG_B]);
+		} finally {
+			await server.close();
 		}
 	});
 });

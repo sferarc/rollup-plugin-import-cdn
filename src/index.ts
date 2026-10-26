@@ -133,7 +133,10 @@ function contextLogger(context: PluginContext): Logger {
 }
 
 // Vite runs its own resolver before unordered plugins, and it marks every URL import external.
-type ImportCdnPlugin = RollupPlugin & { enforce: "pre"; configResolved(): void };
+type ImportCdnPlugin = RollupPlugin & {
+	enforce: "pre";
+	configResolved(config: { command: string }): void;
+};
 
 export function importCdn(pluginOptions: ImportCdnOptions = {}): ImportCdnPlugin {
 	validateOptions(pluginOptions);
@@ -147,6 +150,10 @@ export function importCdn(pluginOptions: ImportCdnOptions = {}): ImportCdnPlugin
 	}
 
 	const timeout = pluginOptions.timeout ?? DEFAULT_TIMEOUT_MS;
+
+	// Set by the Vite-only `configResolved` hook; Rollup never calls it.
+	let isVite = false;
+	let isViteServe = false;
 
 	// resolveId and load both resolve the same id, so each URL is fetched once per build.
 	// A failure, timeouts included, is kept too, so a hanging CDN costs one timeout per URL.
@@ -164,7 +171,12 @@ export function importCdn(pluginOptions: ImportCdnOptions = {}): ImportCdnPlugin
 					body: response.ok ? await response.text() : "",
 				};
 			});
-			responses.set(url, pending);
+			const request = pending;
+			responses.set(url, request);
+			// The dev server runs buildStart once, so a kept failure would last until it restarts.
+			request.catch(() => {
+				if (isViteServe && responses.get(url) === request) responses.delete(url);
+			});
 		}
 		const { body, ...response } = await pending;
 		return { ...response, text: async () => body };
@@ -178,14 +190,12 @@ export function importCdn(pluginOptions: ImportCdnOptions = {}): ImportCdnPlugin
 
 	const options = { ...pluginOptions, fetchImpl };
 
-	// Set by the Vite-only `configResolved` hook; Rollup never calls it.
-	let isVite = false;
-
 	return {
 		name: "plugin-import-cdn",
 		enforce: "pre",
-		configResolved() {
+		configResolved(config) {
 			isVite = true;
+			isViteServe = config.command === "serve";
 		},
 		buildStart() {
 			responses.clear();
