@@ -56,6 +56,13 @@ function isPinnedUrl(value: string) {
 	return /@\d+\.\d+\.\d+(?:-[\w.-]+)?(?:\+[\w.-]+)?(?=\/|$)/.test(new URL(value).pathname);
 }
 
+// Skypack serves an unbuildable package as HTTP 200 from `/error/build:<pkg>`, a module that throws.
+function isSkypackError(value: string) {
+	if (!URL.canParse(value)) return false;
+	const { hostname, pathname } = new URL(value);
+	return hostname === "cdn.skypack.dev" && /^\/error\/[\w-]+:/.test(pathname);
+}
+
 const isHttpUrl = (value: unknown): value is string =>
 	typeof value === "string" && URL.canParse(value) && /^https?:$/.test(new URL(value).protocol);
 
@@ -166,6 +173,7 @@ export async function resolveDependency(
 			// `main`, so a checked URL only trusts it when it is unchanged or has an entry of its own.
 			if (
 				cached &&
+				!isSkypackError(cached.url) &&
 				(cached.url === cdnUrl ||
 					!hasIntegrity(cdnUrl, integrity) ||
 					hasIntegrity(cached.url, integrity))
@@ -181,6 +189,11 @@ export async function resolveDependency(
 			if (!response.ok) {
 				sawHttpError = true;
 				fail(cdnUrl, `HTTP ${response.status ?? "error"}`);
+				continue;
+			}
+			if (isSkypackError(response.url || cdnUrl)) {
+				sawHttpError = true;
+				fail(cdnUrl, `Skypack could not build the package (${response.url || cdnUrl})`);
 				continue;
 			}
 			const main = await response.text();
