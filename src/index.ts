@@ -134,6 +134,9 @@ function contextLogger(context: PluginContext): Logger {
 	};
 }
 
+// Statuses a CDN may answer differently on the next request; a 404 stays kept.
+const isTransientStatus = (status: number) => status === 408 || status === 429 || status >= 500;
+
 // Vite runs its own resolver before unordered plugins, and it marks every URL import external.
 type ImportCdnPlugin = RollupPlugin & {
 	enforce: "pre";
@@ -176,9 +179,12 @@ export function importCdn(pluginOptions: ImportCdnOptions = {}): ImportCdnPlugin
 			const request = pending;
 			responses.set(url, request);
 			// The dev server runs buildStart once, so a kept failure would last until it restarts.
-			request.catch(() => {
+			const forget = () => {
 				if (isViteServe && responses.get(url) === request) responses.delete(url);
-			});
+			};
+			request.then((response) => {
+				if (isTransientStatus(response.status ?? 0)) forget();
+			}, forget);
 		}
 		const { body, ...response } = await pending;
 		return { ...response, text: async () => body };
