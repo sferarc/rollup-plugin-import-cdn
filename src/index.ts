@@ -13,14 +13,16 @@ type FetchedResponse = Omit<Awaited<ReturnType<FetchImpl>>, "text"> & { body: st
 
 const builtins = new Set(builtinModules);
 
+const isHttpUrl = (id: string) => /^https?:\/\//.test(id);
+
+// The Vite dev server resolves `index.html` as an entry even when the root has none.
 const isForeignId = (id: string) =>
 	id.startsWith("\0") ||
 	id.startsWith("node:") ||
 	builtins.has(id) ||
 	path.posix.isAbsolute(id) ||
-	path.win32.isAbsolute(id);
-
-const isHttpUrl = (id: string) => /^https?:\/\//.test(id);
+	path.win32.isAbsolute(id) ||
+	(!isHttpUrl(id) && id.endsWith(".html"));
 
 // Rollup's default resolver accepts an entry with or without these extensions.
 // `throwIfNoEntry` only covers ENOENT, so an id that cannot be a path (ENAMETOOLONG, EACCES)

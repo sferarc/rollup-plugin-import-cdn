@@ -530,7 +530,7 @@ describe("importCdn", () => {
 	});
 
 	describe("foreign ids", () => {
-		it.each(["\0virtual", "node:fs", "fs", "C:\\a\\b.js"])(
+		it.each(["\0virtual", "node:fs", "fs", "C:\\a\\b.js", "index.html", "pages/about.html"])(
 			"skips %s without fetching",
 			async (id) => {
 				const fetchImpl = vi.fn(createMockFetch({}));
