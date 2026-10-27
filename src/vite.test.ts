@@ -262,4 +262,34 @@ describe("Vite dev server", () => {
 			await server.close();
 		}
 	});
+
+	it.each([503, 429])("refetches a %i response on the next page load", async (status) => {
+		const cdnFetch = mockCdn();
+		const fetchImpl = vi.fn<FetchImpl>(async (url) => cdnFetch(url));
+		fetchImpl.mockResolvedValueOnce({ ok: false, status, url: PKG_B, text: async () => "" });
+		const server = await devServer('import { b } from "pkg-b";\nconsole.log(b);', fetchImpl);
+		try {
+			await expect(server.transformRequest("/main.js")).rejects.toThrow(`HTTP ${status}`);
+
+			const main = await server.transformRequest("/main.js");
+			expect(main?.code).toContain('from "/@id/pkg-b"');
+			expect(fetchImpl.mock.calls.map(([url]) => url)).toEqual([PKG_B, PKG_B]);
+		} finally {
+			await server.close();
+		}
+	});
+
+	it("keeps a 404 for the server's lifetime", async () => {
+		const fetchImpl = mockCdn();
+		const server = await devServer('import { x } from "pkg-missing";\nconsole.log(x);', fetchImpl);
+		try {
+			await expect(server.transformRequest("/main.js")).rejects.toThrow("HTTP 404");
+			await expect(server.transformRequest("/main.js")).rejects.toThrow("HTTP 404");
+			expect(fetchImpl.mock.calls.map(([url]) => url)).toEqual([
+				"https://cdn.skypack.dev/pkg-missing",
+			]);
+		} finally {
+			await server.close();
+		}
+	});
 });
