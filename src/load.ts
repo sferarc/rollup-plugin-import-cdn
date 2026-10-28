@@ -80,6 +80,10 @@ function skypackServedVersion(requested: string, main: string): string | undefin
 	return new RegExp(`${prefix}(\\d+\\.\\d+\\.\\d+[\\w.-]*?)-\\w+/`).exec(main)?.[1];
 }
 
+// A captive portal or a soft error page answers 200 with HTML, which no module can start with.
+export const isHtmlPage = (main: string) =>
+	/^\s*<(?:!doctype\s+html|html|head|body)[\s>]/i.test(main);
+
 const isHttpUrl = (value: unknown): value is string =>
 	typeof value === "string" && URL.canParse(value) && /^https?:$/.test(new URL(value).protocol);
 
@@ -204,6 +208,7 @@ export async function resolveDependency(
 				cached &&
 				!isSkypackError(cached.url) &&
 				!skypackServedVersion(cdnUrl, cached.main) &&
+				!isHtmlPage(cached.main) &&
 				(cached.url === cdnUrl ||
 					!hasIntegrity(cdnUrl, integrity) ||
 					hasIntegrity(cached.url, integrity))
@@ -231,6 +236,14 @@ export async function resolveDependency(
 			if (served) {
 				sawHttpError = true;
 				fail(cdnUrl, `Skypack served version ${served} instead`);
+				continue;
+			}
+			if (isHtmlPage(main)) {
+				sawHttpError = true;
+				fail(
+					cdnUrl,
+					`served an HTML page instead of a JavaScript module (${response.url || cdnUrl})`,
+				);
 				continue;
 			}
 			// Custom and mocked fetches can leave `url` empty; without a base the rewrite is a no-op.
