@@ -93,6 +93,39 @@ describe("importCdn", () => {
 			expect(() => importCdn({ fetchImpl, integrity: integrity as never })).toThrow(message);
 		});
 
+		// A string or array used to be read entry by entry, so nothing was pinned; a number lost
+		// trailing zeros on its way into the URL.
+		it.each([
+			["a string", "18.2.0"],
+			["an array", ["react@18.2.0"]],
+			["null", null],
+		])("rejects %s for versions", (_, versions) => {
+			expect(() => importCdn({ fetchImpl, versions: versions as never })).toThrow(
+				"[rollup-plugin-import-cdn] The versions option must be an object mapping package names or specifiers to versions.",
+			);
+		});
+
+		it.each([
+			["a number", 18.1, "got 18.1"],
+			["an empty string", "", 'got ""'],
+			["an object", { version: "18.2.0" }, "got an object"],
+			["a bigint", 18n, "got 18"],
+			["undefined", undefined, "got undefined"],
+		])("rejects %s as a version, naming its key", (_, version, got) => {
+			expect(() => importCdn({ fetchImpl, versions: { react: version as never } })).toThrow(
+				`[rollup-plugin-import-cdn] Invalid version for react: expected a non-empty string, ${got}.`,
+			);
+		});
+
+		it("accepts string versions for names and specifiers", () => {
+			expect(() =>
+				importCdn({
+					fetchImpl,
+					versions: { react: "18.2.0", "react-dom/client": "^18", "@scope/pkg": "latest" },
+				}),
+			).not.toThrow();
+		});
+
 		// A non-function used to pass and fail every request with "baseFetch is not a function",
 		// which reads as a network error: each import was warned about and left unresolved.
 		it.each([

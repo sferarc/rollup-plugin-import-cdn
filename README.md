@@ -46,7 +46,7 @@ import confetti from "https://esm.sh/canvas-confetti";
 | `integrity` | none | SRI hashes that fetched code must match, keyed by URL. See [Integrity](#integrity). |
 | `priority` | `["skypack"]` | CDNs to try, in order. Each entry is `"skypack"`, `"esm.sh"`, `"jsdelivr"` or a function returning a URL; any other entry throws when the plugin is created. See [Custom CDN](#custom-cdn). |
 | `timeout` | `30000` | Milliseconds each request may take, reading the body included, before it counts as a network error and the next CDN is tried. A failed or timed-out URL is not retried until the next build. `0` disables it; the largest accepted value is `2147483647`, the longest delay Node's `setTimeout` holds. The plugin aborts the `signal` it passes to `fetchImpl` and stops waiting even if `fetchImpl` ignores it. |
-| `versions` | none | Versions to pin, keyed by package name or full specifier. See [Version Pinning](#version-pinning). |
+| `versions` | none | Versions to pin, keyed by package name or full specifier. Each value must be a non-empty string; anything else, or a `versions` that is not an object, throws when the plugin is created. See [Version Pinning](#version-pinning). |
 
 ### Version Pinning
 
