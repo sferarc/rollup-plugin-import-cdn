@@ -158,6 +158,12 @@ describe("resolveDependency", () => {
 		["constructor", { lodash: "4.17.21" }, "constructor"],
 		["constructor/sub", { lodash: "4.17.21" }, "constructor/sub"],
 		["constructor", { constructor: "1.0.0" }, "constructor@1.0.0"],
+		// A query or fragment is not part of the package name, so the version goes before it.
+		["preact?dev", { preact: "10.19.3" }, "preact@10.19.3?dev"],
+		["preact?dev", { "preact?dev": "10.19.3" }, "preact@10.19.3?dev"],
+		["@scope/pkg?dev", { "@scope/pkg": "1.0.0" }, "@scope/pkg@1.0.0?dev"],
+		["preact#x", { preact: "10.19.3" }, "preact@10.19.3#x"],
+		["preact@10?dev", { preact: "10.19.3" }, "preact@10?dev"],
 	])("should place the version for %s after the package name (%j)", async (key, versions, path) => {
 		const options: PluginOptions = {
 			fetchImpl: createMockFetch({ [`https://cdn.skypack.dev/${path}`]: "export {};" }),
@@ -172,6 +178,8 @@ describe("resolveDependency", () => {
 		["react-dom/client", { "react-dom": "18.2.0" }, "react-dom@18.2.0/client"],
 		["@scope/pkg/sub", { "@scope/pkg": "1.0.0" }, "@scope/pkg@1.0.0/sub"],
 		["react@17/jsx-runtime", { react: "18.2.0" }, "react@17/jsx-runtime"],
+		["react?dev", { react: "18.2.0" }, "react@18.2.0?dev"],
+		["react-dom/client?dev", { "react-dom": "18.2.0" }, "react-dom@18.2.0/client?dev"],
 	])("should build the esm.sh URL for %s (%j)", async (key, versions, path) => {
 		const options: PluginOptions = {
 			fetchImpl: createMockFetch({ [`https://esm.sh/${path}`]: "export {};" }),
@@ -197,8 +205,10 @@ describe("resolveDependency", () => {
 		["react-dom/client", { "react-dom": "18.2.0" }, "react-dom@18.2.0/client"],
 		["@scope/pkg/sub", { "@scope/pkg": "1.0.0" }, "@scope/pkg@1.0.0/sub"],
 		["react@17/jsx-runtime", { react: "18.2.0" }, "react@17/jsx-runtime"],
-	])("should build the jsdelivr URL for %s (%j)", async (key, versions, path) => {
-		const url = `https://cdn.jsdelivr.net/npm/${path}/+esm`;
+		["react?dev", { react: "18.2.0" }, "react@18.2.0", "?dev"],
+		["react-dom/client?dev", { "react-dom": "18.2.0" }, "react-dom@18.2.0/client", "?dev"],
+	])("should build the jsdelivr URL for %s (%j)", async (key, versions, path, query = "") => {
+		const url = `https://cdn.jsdelivr.net/npm/${path}/+esm${query}`;
 		const options: PluginOptions = {
 			fetchImpl: createMockFetch({ [url]: "export {};" }),
 			priority: ["jsdelivr"],
@@ -229,6 +239,19 @@ describe("resolveDependency", () => {
 		await resolveDependency("react-dom/client", options);
 
 		expect(priority).toHaveBeenCalledWith("react-dom/client", "18.2.0");
+	});
+
+	it("should pass the package's pinned version for a specifier with a query to a custom CDN resolver", async () => {
+		const priority = vi.fn((key: string, version?: string) => `https://esm.sh/${key}&v=${version}`);
+		const options: PluginOptions = {
+			fetchImpl: createMockFetch({ "https://esm.sh/preact?dev&v=10.19.3": "export {};" }),
+			priority: [priority],
+			versions: { preact: "10.19.3" },
+		};
+
+		await resolveDependency("preact?dev", options);
+
+		expect(priority).toHaveBeenCalledWith("preact?dev", "10.19.3");
 	});
 
 	it("should not pass an inherited name in versions to a custom CDN resolver", async () => {

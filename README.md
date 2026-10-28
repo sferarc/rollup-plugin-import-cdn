@@ -59,7 +59,7 @@ importCdn({
 });
 ```
 
-A version set for a package also applies to its subpaths, and goes after the package name: with `versions: { "react-dom": "18.2.0" }`, `import "react-dom/client"` fetches `https://cdn.skypack.dev/react-dom@18.2.0/client`. Scoped packages work the same way, so `@scope/pkg/sub` with `"@scope/pkg": "1.0.0"` fetches `https://cdn.skypack.dev/@scope/pkg@1.0.0/sub`. An entry for the full specifier, such as `"react-dom/client"`, takes precedence over the package entry. A specifier that carries its own version, such as `react@17/jsx-runtime`, ignores `versions`.
+A version set for a package also applies to its subpaths, and goes after the package name: with `versions: { "react-dom": "18.2.0" }`, `import "react-dom/client"` fetches `https://cdn.skypack.dev/react-dom@18.2.0/client`. Scoped packages work the same way, so `@scope/pkg/sub` with `"@scope/pkg": "1.0.0"` fetches `https://cdn.skypack.dev/@scope/pkg@1.0.0/sub`. An entry for the full specifier, such as `"react-dom/client"`, takes precedence over the package entry. A specifier that carries its own version, such as `react@17/jsx-runtime`, ignores `versions`. A query or fragment on the specifier is kept after the version: with `versions: { preact: "10.19.3" }` and `priority: ["esm.sh"]`, `import "preact?dev"` fetches `https://esm.sh/preact@10.19.3?dev`, and `"jsdelivr"` puts it after `/+esm`.
 
 The built-in `"skypack"`, `"esm.sh"` and `"jsdelivr"` entries apply the pin to their URLs. A custom `priority` function receives the version as its second argument and decides how to use it.
 

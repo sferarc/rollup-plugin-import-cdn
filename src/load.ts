@@ -22,11 +22,17 @@ const isUrl = (value: string) => /^(http(s){0,1}:){0,1}\/\//.test(value);
 // `./x`, `../x`, `/x` or `//host/x`: anything that needs a base URL to fetch.
 export const isRelativeReference = (value: string) => /^\.{0,2}\//.test(value);
 
-// `name` is `pkg` or `@scope/pkg`; `subpath` is the rest, starting with `/` or, when the
-// specifier carries its own version, with `@`.
+// `name` is `pkg` or `@scope/pkg`; `subpath` is the rest, starting with `/`, `?` or `#` or,
+// when the specifier carries its own version, with `@`.
 function splitSpecifier(key: string): { name: string; subpath: string } {
-	const [, name = key, subpath = ""] = /^(@[^/]+\/[^/@]+|[^/@]+)(.*)$/.exec(key) ?? [];
+	const [, name = key, subpath = ""] = /^(@[^/]+\/[^/@?#]+|[^/@?#]+)(.*)$/.exec(key) ?? [];
 	return { name, subpath };
+}
+
+// A query such as esm.sh's `?dev` ends the path, so `/+esm` goes before it.
+function splitQuery(key: string): [path: string, query: string] {
+	const index = key.search(/[?#]/);
+	return index === -1 ? [key, ""] : [key.slice(0, index), key.slice(index)];
 }
 
 const withVersion = (key: string, version?: string) => {
@@ -38,7 +44,10 @@ const withVersion = (key: string, version?: string) => {
 const parseCDN: Record<AvailableCDNs, (key: string, version?: string) => string> = {
 	skypack: (key, version) => `https://cdn.skypack.dev/${withVersion(key, version)}`,
 	"esm.sh": (key, version) => `https://esm.sh/${withVersion(key, version)}`,
-	jsdelivr: (key, version) => `https://cdn.jsdelivr.net/npm/${withVersion(key, version)}/+esm`,
+	jsdelivr: (key, version) => {
+		const [path, query] = splitQuery(withVersion(key, version));
+		return `https://cdn.jsdelivr.net/npm/${path}/+esm${query}`;
+	},
 };
 
 function pinnedVersion(key: string, versions: PluginOptions["versions"]) {
