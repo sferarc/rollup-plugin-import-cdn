@@ -9,7 +9,7 @@ Cheapest and they guard the options users already rely on.
 1. **Rollup 3 in CI.** Done: the `Test (Rollup 3.0)` job runs the suite on Rollup 3.0.0 and the plugin passes, so the peer range stays. See [[development/ci]].
 2. **The on-disk cache inside a real build.** Done: `src/rollup.test.ts` fills `cache` in one `rollup()` build, then rebuilds with a `fetchImpl` that throws and expects byte-identical output.
 3. **Multiple entry points and CJS output.** Done: `src/rollup.test.ts` has a two-entry build where a shared CDN module lands in one non-entry chunk and is fetched once, and a `format: "cjs"` build with no `import`, `export` or URL left.
-4. **Watch mode (done).** `buildStart` clears the memo, `moduleUrls` and `modulesByUrl`; `src/rollup.test.ts` has a `rollup.watch` test that a rebuild refetches the CDN modules and keeps one copy of a module reached by name and by URL. Watch always runs with Rollup's `cache` on, so `resolveId` runs again only for the entry; the `buildStart` reset is covered by the two-build test, not by watch.
+4. **Watch mode (done).** `buildStart` clears the memo, `moduleUrls` and `modulesByUrl`; `src/rollup.test.ts` has a `rollup.watch` test that a rebuild refetches the CDN modules and keeps one copy of a module reached by name and by URL. Watch always runs with Rollup's `cache` on, so `resolveId` runs again only for the entry; the `buildStart` reset is covered by the two-build test, not by watch. A second watch test sets `cache` and checks that a rebuild reads every pinned URL from disk with no fetch.
 5. **`bundle.write()` (done).** Covered with a two-entry build in `src/rollup.test.ts`: both entries and the shared chunk reach disk with one fetch per URL.
 
 ## Behaviour gaps
