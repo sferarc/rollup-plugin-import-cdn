@@ -195,6 +195,7 @@ interface ImportCdnPlugin {
 	enforce: "pre";
 	configResolved: (config: { command: string }) => void;
 	buildStart: () => void;
+	buildEnd: (this: HookContext, error?: Error) => void;
 	resolveId: (
 		this: HookContext,
 		source: string,
@@ -258,6 +259,8 @@ export function importCdn(pluginOptions: ImportCdnOptions = {}): ImportCdnPlugin
 	// Served URL to the first module id resolved to it, so a bare name that redirects to a URL
 	// another module imports directly is bundled once rather than as two copies.
 	const modulesByUrl = new Map<string, { id: string; main: string }>();
+	// A version bump leaves an `integrity` key naming the old URL, which then checks nothing.
+	const checkedIntegrity = new Set<string>();
 
 	const options = { ...pluginOptions, fetchImpl };
 
@@ -272,6 +275,17 @@ export function importCdn(pluginOptions: ImportCdnOptions = {}): ImportCdnPlugin
 			responses.clear();
 			moduleUrls.clear();
 			modulesByUrl.clear();
+			checkedIntegrity.clear();
+		},
+		buildEnd(error) {
+			// The dev server runs one build for its lifetime and loads modules on demand.
+			if (error || isViteServe) return;
+			for (const url of Object.keys(pluginOptions.integrity ?? {})) {
+				if (checkedIntegrity.has(url)) continue;
+				this.warn(
+					`The integrity entry for ${url} matched no URL fetched in this build, so nothing was checked against it. Update the key if the URL changed, for example after a version bump.`,
+				);
+			}
 		},
 		async resolveId(key, importer, resolveOptions) {
 			const importerUrl =
@@ -293,7 +307,12 @@ export function importCdn(pluginOptions: ImportCdnOptions = {}): ImportCdnPlugin
 				if (resolved) return resolved;
 			}
 
-			const dependency = await resolveDependency(key, options, contextLogger(this));
+			const dependency = await resolveDependency(
+				key,
+				options,
+				contextLogger(this),
+				checkedIntegrity,
+			);
 			if (!dependency) return;
 			// Only an identical body is shared, so an integrity entry on either URL still covers it.
 			const seen = modulesByUrl.get(dependency.url);
@@ -305,7 +324,12 @@ export function importCdn(pluginOptions: ImportCdnOptions = {}): ImportCdnPlugin
 		async load(key) {
 			// Under Vite this load runs first for every id, including other plugins' unprefixed virtual ids.
 			if (isForeignId(key) || (isVite && !moduleUrls.has(key))) return;
-			const dependency = await resolveDependency(key, options, contextLogger(this));
+			const dependency = await resolveDependency(
+				key,
+				options,
+				contextLogger(this),
+				checkedIntegrity,
+			);
 			if (!dependency) return;
 			// A rebuild from Rollup's cache reuses resolved ids and skips resolveId, but not load.
 			moduleUrls.set(key, dependency.url);

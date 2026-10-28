@@ -42,20 +42,23 @@ export const hasIntegrity = (url: string, integrity: Record<string, string> | un
 	integrity !== undefined && Object.keys(integrity).includes(url);
 
 /**
- * Throws when `body` does not match the `integrity` entry for any of `urls`. As in SRI, only
- * hashes using the strongest listed algorithm count, and any one of them matching passes.
+ * Throws when `body` does not match the `integrity` entry for any of `urls`, and returns the
+ * URLs that had one. As in SRI, only hashes using the strongest listed algorithm count, and any
+ * one of them matching passes.
  */
 export function verifyIntegrity(
 	urls: string[],
 	body: string,
 	integrity: Record<string, string> | undefined,
-) {
-	if (!integrity) return;
+): string[] {
+	if (!integrity) return [];
+	const checked: string[] = [];
 	// A Map keeps inherited names such as `constructor` from reading as entries.
 	const entries = new Map(Object.entries(integrity));
 	for (const url of new Set(urls)) {
 		const expected = entries.get(url);
 		if (expected === undefined) continue;
+		checked.push(url);
 		const hashes = parseIntegrity(expected);
 		const strongest = hashes.reduce(
 			(best, { algorithm }) => (strength(algorithm) > strength(best) ? algorithm : best),
@@ -71,4 +74,5 @@ export function verifyIntegrity(
 			);
 		}
 	}
+	return checked;
 }

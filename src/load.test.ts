@@ -1215,6 +1215,19 @@ describe("resolveDependency integrity", () => {
 		expect(dependency).toEqual({ name: pinned, url: final, main: body });
 	});
 
+	it("should collect the URLs whose entries the module was checked against", async () => {
+		const checked = new Set<string>();
+		const integrity = {
+			[pinned]: sri(body),
+			[final]: sri(body),
+			"https://esm.sh/react@18.3.1": sri(body),
+		};
+
+		await resolveDependency(pinned, { fetchImpl: servingFetch([]), integrity }, undefined, checked);
+
+		expect([...checked]).toEqual([pinned, final]);
+	});
+
 	it("should throw on a mismatch instead of trying the next CDN", async () => {
 		const calls: string[] = [];
 		const options: PluginOptions = {
