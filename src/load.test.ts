@@ -90,6 +90,20 @@ describe("resolveDependency", () => {
 		expect(logger.warn).not.toHaveBeenCalled();
 	});
 
+	it.each([
+		["a relative path", () => "react.js", '"react.js"'],
+		["an empty string", () => "", '""'],
+		["a number", () => 42 as unknown as string, "42"],
+	])("should reject a custom CDN resolver that returns %s", async (_, resolver, shown) => {
+		const fetchImpl = vi.fn(createMockFetch({}));
+		const options: PluginOptions = { fetchImpl, priority: ["skypack", resolver] };
+
+		await expect(resolveDependency("react", options)).rejects.toThrow(
+			`priority[1] returned ${shown} for react; expected an absolute URL or undefined`,
+		);
+		expect(fetchImpl).not.toHaveBeenCalled();
+	});
+
 	it("should resolve package from skypack by default", async () => {
 		const mockContent = 'export const foo = "bar";';
 		const options: PluginOptions = {
