@@ -117,6 +117,14 @@ importCdn({
 
 A custom function receives the specifier as written and, as its second argument, the version from `versions` that applies to it, if any. That includes a specifier with a scheme other than `http(s):`, such as `npm:react` or `virtual:x`, which the built-in entries skip because it is not an npm name.
 
+A function that returns `undefined` skips the specifier, and the next entry in `priority` is tried without a request. When every entry skips it, the import is left to the next plugin or to Rollup, with no fetch and no warning:
+
+```js
+importCdn({
+  priority: [(key) => (key.startsWith("npm:") ? `https://esm.sh/${key.slice(4)}` : undefined)],
+});
+```
+
 ## Behaviour
 
 - **Fallback.** Each CDN in `priority` is tried in turn. A non-OK response, a network error or a request that exceeds `timeout` moves on to the next one.
