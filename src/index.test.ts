@@ -93,6 +93,26 @@ describe("importCdn", () => {
 			expect(() => importCdn({ fetchImpl, integrity: integrity as never })).toThrow(message);
 		});
 
+		// Entries are matched against fetched URLs, so a bare name used to leave the module unchecked.
+		it.each([
+			["a package name", "lodash"],
+			["a versioned specifier", "lodash@4.17.21"],
+			["a root-relative path", "/lodash@4.17.21"],
+			["a protocol-relative URL", "//cdn.skypack.dev/lodash@4.17.21"],
+		])("rejects %s as an integrity key", (_, key) => {
+			const sri = `sha384-${"A".repeat(64)}`;
+			expect(() => importCdn({ fetchImpl, integrity: { [key]: sri } })).toThrow(
+				`[rollup-plugin-import-cdn] Invalid integrity key ${JSON.stringify(key)}: expected the absolute URL the plugin fetches`,
+			);
+		});
+
+		it("accepts an absolute URL as an integrity key", () => {
+			const sri = `sha384-${"A".repeat(64)}`;
+			expect(() =>
+				importCdn({ fetchImpl, integrity: { "https://cdn.skypack.dev/lodash@4.17.21": sri } }),
+			).not.toThrow();
+		});
+
 		// A string or array used to be read entry by entry, so nothing was pinned; a number lost
 		// trailing zeros on its way into the URL.
 		it.each([
