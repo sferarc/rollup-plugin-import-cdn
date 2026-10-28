@@ -117,7 +117,7 @@ importCdn({
 
 A custom function receives the specifier as written and, as its second argument, the version from `versions` that applies to it, if any. That includes a specifier with a scheme other than `http(s):`, such as `npm:react` or `virtual:x`, which the built-in entries skip because it is not an npm name.
 
-A function that returns `undefined` skips the specifier, and the next entry in `priority` is tried without a request. When every entry skips it, the import is left to the next plugin or to Rollup, with no fetch and no warning:
+A function must return an absolute URL or `undefined`; anything else, such as a relative path, fails the build. A function that returns `undefined` skips the specifier, and the next entry in `priority` is tried without a request. When every entry skips it, the import is left to the next plugin or to Rollup, with no fetch and no warning:
 
 ```js
 importCdn({
