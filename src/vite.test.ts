@@ -107,6 +107,28 @@ describe("Vite build", () => {
 		expect(code).toContain("console.log(wasm, import.meta.url)");
 	});
 
+	it("names a CDN module in the sourcemap by the URL it was served from", async () => {
+		await writeFile(
+			path.join(root, "main.js"),
+			'import { used } from "pkg-a";\nconsole.log(used());',
+		);
+		const result = await build({
+			root,
+			configFile: false,
+			logLevel: "silent",
+			build: { write: false, minify: false, sourcemap: true },
+			plugins: [cdnPlugin(mockCdn())],
+		});
+		const sources = (Array.isArray(result) ? result : [result])
+			.flatMap((output) => ("output" in output ? output.output : []))
+			.flatMap((chunk) => (chunk.type === "chunk" ? (chunk.map?.sources ?? []) : []));
+
+		expect(sources).toContain(PKG_A_REDIRECT);
+		expect(sources.filter((source) => !source.startsWith("https://"))).toEqual([
+			expect.stringMatching(/(^|\/)main\.js$/),
+		]);
+	});
+
 	it("leaves installed packages and Vite's own modules to Vite", async () => {
 		const pkg = path.join(root, "node_modules", "local-pkg");
 		await mkdir(pkg, { recursive: true });
