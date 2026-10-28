@@ -181,6 +181,27 @@ describe("Rollup build", () => {
 		expect(fetchCounts()).toEqual({});
 	});
 
+	it("leaves a module a custom priority function skips to the plugin listed after it", async () => {
+		const { fetchImpl, fetchCounts } = mockCdn();
+		await writeFile(entry, 'import { greeting } from "greeting";\nconsole.log(greeting);');
+		const local: Plugin = {
+			name: "local-greeting",
+			resolveId: (id) => (id === "greeting" ? "\0greeting" : undefined),
+			load: (id) => (id === "\0greeting" ? 'export const greeting = "LOCAL";' : undefined),
+		};
+		const priority = [
+			(key: string) => (key === "greeting" ? undefined : `https://cdn.test/${key}`),
+		];
+
+		const code = await build({
+			input: entry,
+			plugins: [importCdn({ fetchImpl, priority }), local],
+		});
+
+		expect(code).toContain('"LOCAL"');
+		expect(fetchCounts()).toEqual({});
+	});
+
 	it("leaves a virtual: entry too long to be a file name to the plugin listed after it", async () => {
 		const { fetchImpl, fetchCounts } = mockCdn();
 		// One path segment over 255 bytes: stat fails with ENAMETOOLONG rather than ENOENT.

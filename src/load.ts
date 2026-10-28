@@ -144,7 +144,11 @@ function resolveDependencyUrls(key: string, options: PluginOptions): string[] {
 	const notPackageName = /^[a-z][a-z\d+.-]*:/i.test(key) || key.startsWith("#");
 
 	return priorities.flatMap((cdn) => {
-		if (typeof cdn !== "string") return [cdn(key, version)];
+		if (typeof cdn !== "string") {
+			// A function returns undefined for a specifier it does not serve, so no request is made.
+			const url = cdn(key, version);
+			return url == null ? [] : [url];
+		}
 		return notPackageName ? [] : [parseCDN[cdn](key, version)];
 	});
 }
