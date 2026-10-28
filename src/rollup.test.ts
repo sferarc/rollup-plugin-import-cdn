@@ -644,6 +644,58 @@ describe("Rollup build", () => {
 		expect(code).toContain('"DIRECT"');
 	});
 
+	it("warns about an integrity entry that no URL fetched in the build matched", async () => {
+		const { fetchImpl } = mockCdn();
+		await writeFile(entry, `import { direct } from "${DIRECT}";\nconsole.log(direct);`);
+		const stale = "https://esm.test/direct@0.9.0.js";
+		const integrity = {
+			...integrityFor('export const direct = "DIRECT";'),
+			[stale]: integrityFor("")[DIRECT]!,
+		};
+		const warnings: RollupLog[] = [];
+
+		const bundle = await rollup({
+			input: entry,
+			onwarn: (warning) => {
+				warnings.push(warning);
+			},
+			plugins: [importCdn({ fetchImpl, integrity })],
+		});
+		await bundle.close();
+
+		expect(warnings).toHaveLength(1);
+		expect(warnings[0]?.code).toBe("PLUGIN_WARNING");
+		expect(warnings[0]?.plugin).toBe("plugin-import-cdn");
+		expect(warnings[0]?.message).toContain(
+			`The integrity entry for ${stale} matched no URL fetched in this build`,
+		);
+	});
+
+	it("counts an integrity entry checked against an on-disk cache read as matched", async () => {
+		const pinned = "https://cdn.skypack.dev/pkg-b@1.0.0";
+		const { fetchImpl } = mockCdn({ [pinned]: cdn[PKG_B]! });
+		await writeFile(entry, 'import { b } from "pkg-b";\nconsole.log(b);');
+		const options = {
+			cache: path.join(dir, "cache"),
+			versions: { "pkg-b": "1.0.0" },
+			integrity: {
+				[pinned]: `sha384-${createHash("sha384").update(cdn[PKG_B]!.body).digest("base64")}`,
+			},
+		};
+		await build({ input: entry, plugins: [importCdn({ ...options, fetchImpl })] });
+
+		const offline = vi.fn<FetchImpl>(async () => {
+			throw new Error("The cache should have served every URL");
+		});
+		const code = await build({
+			input: entry,
+			plugins: [importCdn({ ...options, fetchImpl: offline })],
+		});
+
+		expect(offline).not.toHaveBeenCalled();
+		expect(code).toContain('"PKG_B"');
+	});
+
 	it("fails the build when a URL's body does not match its integrity entry", async () => {
 		const { fetchImpl } = mockCdn();
 		await writeFile(entry, `import { direct } from "${DIRECT}";\nconsole.log(direct);`);

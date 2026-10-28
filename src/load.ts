@@ -169,10 +169,12 @@ function formatAttempts(name: string, attempts: { url: string; reason: string }[
 		.join("\n");
 }
 
+// `checked` collects the URLs whose `integrity` entries a returned module was verified against.
 export async function resolveDependency(
 	name: string,
 	options: PluginOptions,
 	logger: Logger = silent,
+	checked?: Set<string>,
 ): Promise<Dependency | null> {
 	const urls = resolveDependencyUrls(name, options);
 	if (urls.length === 0) return null;
@@ -181,6 +183,9 @@ export async function resolveDependency(
 	const attempts: { url: string; reason: string }[] = [];
 	let sawHttpError = false;
 	let lastError: unknown;
+	const verify = (urls: string[], main: string) => {
+		for (const url of verifyIntegrity(urls, main, integrity)) checked?.add(url);
+	};
 	const fail = (url: string, reason: string) => {
 		attempts.push({ url, reason });
 		logger.debug(`Failed to fetch ${name} from ${url}: ${reason}`);
@@ -200,7 +205,7 @@ export async function resolveDependency(
 					!hasIntegrity(cdnUrl, integrity) ||
 					hasIntegrity(cached.url, integrity))
 			) {
-				verifyIntegrity([cdnUrl, cached.url], cached.main, integrity);
+				verify([cdnUrl, cached.url], cached.main);
 				return { name, ...cached };
 			}
 		}
@@ -234,7 +239,7 @@ export async function resolveDependency(
 		}
 
 		// Outside the try: a mismatch means tampered content, so it fails rather than trying the next CDN.
-		verifyIntegrity([cdnUrl, fetched.url], fetched.main, integrity);
+		verify([cdnUrl, fetched.url], fetched.main);
 		if (cacheable) await writeCache(cache, cdnUrl, fetched, logger);
 
 		return { name, ...fetched };
