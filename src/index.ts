@@ -90,6 +90,12 @@ function validateOptions({
 			);
 		}
 		for (const [url, value] of Object.entries(integrity)) {
+			// Entries are looked up by the fetched URL, so a key such as `lodash` would check nothing.
+			if (!URL.canParse(url)) {
+				throw new Error(
+					`[rollup-plugin-import-cdn] Invalid integrity key ${JSON.stringify(url)}: expected the absolute URL the plugin fetches, such as https://cdn.skypack.dev/lodash@4.17.21.`,
+				);
+			}
 			try {
 				if (typeof value !== "string") throw new Error("expected a string");
 				parseIntegrity(value);

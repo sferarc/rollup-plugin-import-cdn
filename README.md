@@ -89,7 +89,7 @@ importCdn({
 });
 ```
 
-Each entry maps a URL to a [Subresource Integrity](https://developer.mozilla.org/en-US/docs/Web/Security/Subresource_Integrity) value: `sha256-`, `sha384-` or `sha512-` followed by the base64 digest of the module source. The key can be the URL the plugin requests or the URL the CDN redirects to. When the fetched source does not match, the build fails with the URL and the expected and actual digests; the plugin does not fall back to the next CDN. Several space-separated hashes are accepted, and as in browsers only those using the strongest listed algorithm count, any one of them matching. URLs without an entry are not checked, and an invalid value throws when the plugin is created.
+Each entry maps a URL to a [Subresource Integrity](https://developer.mozilla.org/en-US/docs/Web/Security/Subresource_Integrity) value: `sha256-`, `sha384-` or `sha512-` followed by the base64 digest of the module source. The key can be the URL the plugin requests or the URL the CDN redirects to. When the fetched source does not match, the build fails with the URL and the expected and actual digests; the plugin does not fall back to the next CDN. Several space-separated hashes are accepted, and as in browsers only those using the strongest listed algorithm count, any one of them matching. URLs without an entry are not checked. An invalid value throws when the plugin is created, and so does a key that is not an absolute URL, such as `lodash` or `//cdn.skypack.dev/lodash@4.17.21`, since it could never match a fetched URL.
 
 jsDelivr builds its `+esm` files on demand and advises against SRI for them, so a `"jsdelivr"` URL with an entry can fail the build after a rebuild on their side.
 
