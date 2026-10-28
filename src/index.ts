@@ -1,7 +1,6 @@
 import { statSync } from "node:fs";
 import { builtinModules } from "node:module";
 import path from "node:path";
-import type { PluginContext, Plugin as RollupPlugin } from "rollup";
 import { parseIntegrity } from "./integrity";
 import { isRelativeReference, type Logger, resolveDependency, rewriteImports } from "./load";
 import { availableCDNs, type FetchImpl, type PluginOptions } from "./types";
@@ -124,7 +123,7 @@ function withTimeout<T>(
 	return Promise.race([request(controller.signal), deadline]).finally(() => clearTimeout(timer));
 }
 
-function contextLogger(context: PluginContext): Logger {
+function contextLogger(context: HookContext): Logger {
 	return {
 		warn: (message) => context.warn(message),
 		// Rollup added `this.debug` in 3.25; earlier 3.x peers drop debug messages.
@@ -137,11 +136,32 @@ function contextLogger(context: PluginContext): Logger {
 // Statuses a CDN may answer differently on the next request; a 404 stays kept.
 const isTransientStatus = (status: number) => status === 408 || status === 429 || status >= 500;
 
-// Vite runs its own resolver before unordered plugins, and it marks every URL import external.
-type ImportCdnPlugin = RollupPlugin & {
+// Only members Rollup's and Vite 8's (Rolldown) contexts share, so both Plugin types accept the plugin.
+interface HookContext {
+	warn(message: string): void;
+	debug?(message: string): void;
+	resolve(
+		source: string,
+		importer: string | undefined,
+		options: { custom?: Record<string, unknown>; isEntry?: boolean; skipSelf?: boolean },
+	): Promise<{ id: string } | null>;
+}
+
+interface ImportCdnPlugin {
+	name: string;
+	// Vite runs its own resolver before unordered plugins, and it marks every URL import external.
 	enforce: "pre";
-	configResolved(config: { command: string }): void;
-};
+	configResolved: (config: { command: string }) => void;
+	buildStart: () => void;
+	resolveId: (
+		this: HookContext,
+		source: string,
+		importer: string | undefined,
+		options: { custom?: Record<string, unknown>; isEntry: boolean },
+	) => Promise<string | { id: string } | undefined>;
+	load: (this: HookContext, id: string) => Promise<string | undefined>;
+	resolveImportMeta: (property: string | null, options: { moduleId: string }) => string | undefined;
+}
 
 export function importCdn(pluginOptions: ImportCdnOptions = {}): ImportCdnPlugin {
 	validateOptions(pluginOptions);

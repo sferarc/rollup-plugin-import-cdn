@@ -29,8 +29,8 @@ const cdn: Record<string, { url?: string; body: string }> = {
 	[META]: { body: 'export const wasm = new URL("./mod.wasm", import.meta.url).href;' },
 };
 
-// Vite 8 types plugins against Rolldown's context, which Rollup's PluginContext type does not match.
-const cdnPlugin = (fetchImpl: FetchImpl) => importCdn({ fetchImpl }) as unknown as Plugin;
+// No cast: a TypeScript Vite config takes the plugin as typed, so typecheck guards it.
+const cdnPlugin = (fetchImpl: FetchImpl): Plugin => importCdn({ fetchImpl });
 
 function mockCdn() {
 	return vi.fn<FetchImpl>(async (url) => {
