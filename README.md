@@ -130,7 +130,7 @@ A custom function receives the specifier as written and, as its second argument,
 
 Under `vite dev`, a fetched package is served by the dev server at `/@id/<name>`, and bare imports inside it come back through the plugin. URL imports, and the absolute URLs the plugin writes into CDN modules for their relative imports, are left for the browser to load from the CDN, so `integrity` does not cover them in dev. A request that failed with a network error, a timeout or an HTTP 408, 429 or 5xx is fetched again on the next page load rather than kept until the server restarts; any other status, such as a 404, is kept.
 
-`importCdn()` is typed as a Rollup plugin, which Vite 8's `Plugin` type does not accept, so a TypeScript config needs a cast such as `importCdn() as unknown as PluginOption`.
+`importCdn()` is typed so that both Rollup's and Vite 8's `Plugin` types accept it, so a TypeScript `vite.config.ts` takes `plugins: [importCdn()]` without a cast.
 
 `vite build --watch` rebuilds through the plugin like a fresh build: every CDN module is fetched again on each rebuild, as under `rollup --watch`. Set `cache` to read pinned URLs from disk instead.
 
