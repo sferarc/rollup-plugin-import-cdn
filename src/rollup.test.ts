@@ -572,6 +572,21 @@ describe("Rollup build", () => {
 		expect(warnings[0]?.log.message).toContain("Could not resolve dependency offline");
 	});
 
+	it("fails the build when a custom priority function returns a relative URL", async () => {
+		const { fetchImpl, fetchCounts } = mockCdn();
+		await writeFile(entry, 'import { x } from "lib";\nconsole.log(x);');
+
+		await expect(
+			rollup({
+				input: entry,
+				plugins: [importCdn({ fetchImpl, priority: [(key) => `${key}.js`] })],
+			}),
+		).rejects.toThrow(
+			'priority[0] returned "lib.js" for lib; expected an absolute URL or undefined',
+		);
+		expect(fetchCounts()).toEqual({});
+	});
+
 	it("fails the build with every attempted URL when all CDNs return 404", async () => {
 		const { fetchImpl } = mockCdn();
 		await writeFile(entry, 'import { x } from "missing";\nconsole.log(x);');

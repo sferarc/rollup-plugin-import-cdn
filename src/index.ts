@@ -2,7 +2,13 @@ import { statSync } from "node:fs";
 import { builtinModules } from "node:module";
 import path from "node:path";
 import { parseIntegrity } from "./integrity";
-import { isRelativeReference, type Logger, resolveDependency, rewriteImports } from "./load";
+import {
+	isHtmlPage,
+	isRelativeReference,
+	type Logger,
+	resolveDependency,
+	rewriteImports,
+} from "./load";
 import { availableCDNs, type FetchImpl, type PluginOptions } from "./types";
 
 type ImportCdnOptions = Omit<PluginOptions, "fetchImpl"> &
@@ -239,8 +245,9 @@ export function importCdn(pluginOptions: ImportCdnOptions = {}): ImportCdnPlugin
 			const forget = () => {
 				if (isViteServe && responses.get(url) === request) responses.delete(url);
 			};
+			// An HTML page is usually a captive portal, which answers differently once signed in.
 			request.then((response) => {
-				if (isTransientStatus(response.status ?? 0)) forget();
+				if (isTransientStatus(response.status ?? 0) || isHtmlPage(response.body)) forget();
 			}, forget);
 		}
 		const { body, ...response } = await pending;

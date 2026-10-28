@@ -80,6 +80,10 @@ function skypackServedVersion(requested: string, main: string): string | undefin
 	return new RegExp(`${prefix}(\\d+\\.\\d+\\.\\d+[\\w.-]*?)-\\w+/`).exec(main)?.[1];
 }
 
+// A captive portal or a soft error page answers 200 with HTML, which no module can start with.
+export const isHtmlPage = (main: string) =>
+	/^\s*<(?:!doctype\s+html|html|head|body)[\s>]/i.test(main);
+
 const isHttpUrl = (value: unknown): value is string =>
 	typeof value === "string" && URL.canParse(value) && /^https?:$/.test(new URL(value).protocol);
 
@@ -143,11 +147,19 @@ function resolveDependencyUrls(key: string, options: PluginOptions): string[] {
 	// CDN. A custom function still sees it and may map a scheme such as `npm:` itself.
 	const notPackageName = /^[a-z][a-z\d+.-]*:/i.test(key) || key.startsWith("#");
 
-	return priorities.flatMap((cdn) => {
+	return priorities.flatMap((cdn, index) => {
 		if (typeof cdn !== "string") {
 			// A function returns undefined for a specifier it does not serve, so no request is made.
-			const url = cdn(key, version);
-			return url == null ? [] : [url];
+			const url: unknown = cdn(key, version);
+			if (url == null) return [];
+			// A relative result cannot be fetched by the global `fetch` or serve as a base for the module's own imports.
+			if (typeof url !== "string" || !URL.canParse(url)) {
+				const shown = typeof url === "string" ? JSON.stringify(url) : String(url);
+				throw new Error(
+					`[rollup-plugin-import-cdn] priority[${index}] returned ${shown} for ${key}; expected an absolute URL or undefined`,
+				);
+			}
+			return [url];
 		}
 		return notPackageName ? [] : [parseCDN[cdn](key, version)];
 	});
@@ -201,6 +213,7 @@ export async function resolveDependency(
 				cached &&
 				!isSkypackError(cached.url) &&
 				!skypackServedVersion(cdnUrl, cached.main) &&
+				!isHtmlPage(cached.main) &&
 				(cached.url === cdnUrl ||
 					!hasIntegrity(cdnUrl, integrity) ||
 					hasIntegrity(cached.url, integrity))
@@ -228,6 +241,14 @@ export async function resolveDependency(
 			if (served) {
 				sawHttpError = true;
 				fail(cdnUrl, `Skypack served version ${served} instead`);
+				continue;
+			}
+			if (isHtmlPage(main)) {
+				sawHttpError = true;
+				fail(
+					cdnUrl,
+					`served an HTML page instead of a JavaScript module (${response.url || cdnUrl})`,
+				);
 				continue;
 			}
 			// Custom and mocked fetches can leave `url` empty; without a base the rewrite is a no-op.

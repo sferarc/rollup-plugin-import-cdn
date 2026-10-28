@@ -324,6 +324,27 @@ describe("Vite dev server", () => {
 		}
 	});
 
+	it("refetches an HTML page on the next page load", async () => {
+		const cdnFetch = mockCdn();
+		const fetchImpl = vi.fn<FetchImpl>(async (url) => cdnFetch(url));
+		fetchImpl.mockResolvedValueOnce({
+			ok: true,
+			status: 200,
+			url: "https://portal.test/login",
+			text: async () => "<!doctype html><html><body>Sign in</body></html>",
+		});
+		const server = await devServer('import { b } from "pkg-b";\nconsole.log(b);', fetchImpl);
+		try {
+			await expect(server.transformRequest("/main.js")).rejects.toThrow("served an HTML page");
+
+			const main = await server.transformRequest("/main.js");
+			expect(main?.code).toContain('from "/@id/pkg-b"');
+			expect(fetchImpl.mock.calls.map(([url]) => url)).toEqual([PKG_B, PKG_B]);
+		} finally {
+			await server.close();
+		}
+	});
+
 	it("keeps a 404 for the server's lifetime", async () => {
 		const fetchImpl = mockCdn();
 		const server = await devServer('import { x } from "pkg-missing";\nconsole.log(x);', fetchImpl);
