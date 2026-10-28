@@ -7,6 +7,7 @@ import {
 	type Plugin,
 	type RollupLog,
 	type RollupOptions,
+	type RollupWatchOptions,
 	rollup,
 	VERSION,
 	watch,
@@ -75,6 +76,36 @@ async function build(options: RollupOptions) {
 	const { output } = await bundle.generate({ format: "es" });
 	await bundle.close();
 	return output.map((chunk) => (chunk.type === "chunk" ? chunk.code : "")).join("\n");
+}
+
+// The OS watcher may not be armed when the first build ends, so `rebuild` rewrites the file until one fires.
+function startWatch(options: RollupWatchOptions) {
+	const watcher = watch({ onwarn: (warning) => expect.fail(warning.message), ...options });
+	const failure = new Promise<never>((_, reject) => {
+		watcher.on("event", (event) => {
+			if (event.code === "ERROR") reject(event.error);
+			if (event.code === "BUNDLE_END") void event.result.close();
+		});
+	});
+	failure.catch(() => {});
+	const nextEnd = () =>
+		Promise.race([
+			failure,
+			new Promise<void>((resolve) => {
+				const onEvent = (event: { code: string }) => {
+					if (event.code !== "END") return;
+					watcher.off("event", onEvent);
+					resolve();
+				};
+				watcher.on("event", onEvent);
+			}),
+		]);
+	const rebuild = (file: string, contents: string) => {
+		const rebuilt = nextEnd();
+		const touch = setInterval(() => void writeFile(file, contents), 100);
+		return rebuilt.finally(() => clearInterval(touch));
+	};
+	return { nextEnd, rebuild, close: () => watcher.close() };
 }
 
 describe("Rollup build", () => {
@@ -391,34 +422,14 @@ describe("Rollup build", () => {
 		);
 		const { fetchImpl, fetchCounts } = mockCdn();
 		const file = path.join(dir, "out", "bundle.js");
-		const watcher = watch({
+		const watcher = startWatch({
 			input: entry,
 			output: { file, format: "es" },
-			onwarn: (warning) => expect.fail(warning.message),
 			plugins: [importCdn({ fetchImpl })],
 		});
-		const failure = new Promise<never>((_, reject) => {
-			watcher.on("event", (event) => {
-				if (event.code === "ERROR") reject(event.error);
-				if (event.code === "BUNDLE_END") void event.result.close();
-			});
-		});
-		failure.catch(() => {});
-		const nextEnd = () =>
-			Promise.race([
-				failure,
-				new Promise<void>((resolve) => {
-					const onEvent = (event: { code: string }) => {
-						if (event.code !== "END") return;
-						watcher.off("event", onEvent);
-						resolve();
-					};
-					watcher.on("event", onEvent);
-				}),
-			]);
 
 		try {
-			await nextEnd();
+			await watcher.nextEnd();
 			const first = await readFile(file, "utf8");
 			expect(fetchCounts()).toEqual({
 				[PKG_A]: 1,
@@ -428,12 +439,7 @@ describe("Rollup build", () => {
 				[PKG_B]: 1,
 			});
 
-			// The OS watcher may not be armed yet when the first build ends, so touch the file until it fires.
-			const rebuilt = nextEnd();
-			const touch = setInterval(() => {
-				void writeFile(path.join(dir, "local.js"), 'export const local = "LOCAL_V2";');
-			}, 100);
-			await rebuilt.finally(() => clearInterval(touch));
+			await watcher.rebuild(path.join(dir, "local.js"), 'export const local = "LOCAL_V2";');
 			const second = await readFile(file, "utf8");
 
 			expect(second).toBe(first.replace('"LOCAL"', '"LOCAL_V2"'));
@@ -448,6 +454,61 @@ describe("Rollup build", () => {
 				[SHARED]: 2,
 				[PKG_B]: 2,
 			});
+		} finally {
+			await watcher.close();
+		}
+	});
+
+	it("serves pinned URLs from the on-disk cache on a watch rebuild", async () => {
+		await writeFile(
+			entry,
+			[
+				'import { used } from "pkg-a";',
+				'import { local } from "./local.js";',
+				"console.log(used(), local);",
+			].join("\n"),
+		);
+		const { fetchImpl: pinnedFetch, fetchCounts } = mockCdn({
+			"https://cdn.skypack.dev/pkg-a@1.0.0": cdn[PKG_A]!,
+			"https://cdn.skypack.dev/pkg-b@1.0.0": cdn[PKG_B]!,
+		});
+		let online = true;
+		const fetchImpl = vi.fn<FetchImpl>(async (url, init) => {
+			if (!online) throw new Error("The cache should have served every URL");
+			return pinnedFetch(url, init);
+		});
+		const file = path.join(dir, "out", "bundle.js");
+		const watcher = startWatch({
+			input: entry,
+			output: { file, format: "es" },
+			plugins: [
+				importCdn({
+					fetchImpl,
+					cache: path.join(dir, "cache"),
+					versions: { "pkg-a": "1.0.0", "pkg-b": "1.0.0" },
+				}),
+			],
+		});
+
+		try {
+			await watcher.nextEnd();
+			const first = await readFile(file, "utf8");
+			expect(Object.keys(fetchCounts()).sort()).toEqual([
+				"https://cdn.skypack.dev/-/pkg-a@1.0.0/dist/helper.js",
+				"https://cdn.skypack.dev/-/shared@1.0.0/index.js",
+				"https://cdn.skypack.dev/pkg-a@1.0.0",
+				"https://cdn.skypack.dev/pkg-b@1.0.0",
+			]);
+
+			online = false;
+			fetchImpl.mockClear();
+			await watcher.rebuild(path.join(dir, "local.js"), 'export const local = "LOCAL_V2";');
+			const second = await readFile(file, "utf8");
+
+			expect(fetchImpl).not.toHaveBeenCalled();
+			expect(second).toBe(first.replace('"LOCAL"', '"LOCAL_V2"'));
+			expect(second).toContain('"HELPER"');
+			expect(second).toContain('"SHARED"');
 		} finally {
 			await watcher.close();
 		}
