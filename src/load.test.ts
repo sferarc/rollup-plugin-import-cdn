@@ -62,6 +62,34 @@ describe("resolveDependency", () => {
 		expect(priority).toHaveBeenCalledWith("npm:react", undefined);
 	});
 
+	it("should skip a custom CDN resolver that returns undefined and try the next entry", async () => {
+		const fetchImpl = vi.fn(createMockFetch({ "https://cdn.skypack.dev/react": "export {};" }));
+		const logger = spyLogger();
+		const options: PluginOptions = {
+			fetchImpl,
+			priority: [
+				(key) => (key.startsWith("npm:") ? `https://esm.sh/${key.slice(4)}` : undefined),
+				"skypack",
+			],
+		};
+
+		expect((await resolveDependency("react", options, logger))?.url).toBe(
+			"https://cdn.skypack.dev/react",
+		);
+		expect(fetchImpl.mock.calls.map(([url]) => url)).toEqual(["https://cdn.skypack.dev/react"]);
+		expect(logger.debug).not.toHaveBeenCalled();
+	});
+
+	it("should leave a specifier every custom CDN resolver skips without a fetch or a warning", async () => {
+		const fetchImpl = vi.fn(createMockFetch({}));
+		const logger = spyLogger();
+		const options: PluginOptions = { fetchImpl, priority: [() => undefined] };
+
+		expect(await resolveDependency("virtual:greeting", options, logger)).toBeNull();
+		expect(fetchImpl).not.toHaveBeenCalled();
+		expect(logger.warn).not.toHaveBeenCalled();
+	});
+
 	it("should resolve package from skypack by default", async () => {
 		const mockContent = 'export const foo = "bar";';
 		const options: PluginOptions = {
