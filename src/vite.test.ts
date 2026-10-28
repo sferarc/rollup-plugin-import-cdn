@@ -11,6 +11,7 @@ const PKG_A_REDIRECT = "https://cdn.skypack.dev/-/pkg-a@1.0.0/dist/index.js";
 const HELPER = "https://cdn.skypack.dev/-/pkg-a@1.0.0/dist/helper.js";
 const PKG_B = "https://cdn.skypack.dev/pkg-b";
 const DIRECT = "https://esm.test/direct.js";
+const META = "https://esm.test/meta.js";
 
 const cdn: Record<string, { url?: string; body: string }> = {
 	[PKG_A]: {
@@ -25,6 +26,7 @@ const cdn: Record<string, { url?: string; body: string }> = {
 	[HELPER]: { body: 'export const helper = () => "HELPER";' },
 	[PKG_B]: { body: 'export const b = "PKG_B";' },
 	[DIRECT]: { body: 'export const direct = "DIRECT";' },
+	[META]: { body: 'export const wasm = new URL("./mod.wasm", import.meta.url).href;' },
 };
 
 // Vite 8 types plugins against Rolldown's context, which Rollup's PluginContext type does not match.
@@ -92,6 +94,17 @@ describe("Vite build", () => {
 		for (const marker of ['"HELPER"', '"PKG_B"', '"DIRECT"']) expect(code).toContain(marker);
 		expect(code).not.toContain("UNUSED_EXPORT");
 		expect(code).not.toMatch(/\bfrom\s*["']https?:/);
+	});
+
+	it("points import.meta.url in a CDN module at the URL it was served from", async () => {
+		const code = await viteBuild(
+			`import { wasm } from "${META}";\nconsole.log(wasm, import.meta.url);`,
+			[cdnPlugin(mockCdn())],
+		);
+
+		expect(code).toContain(`new URL("./mod.wasm", "${META}")`);
+		// The local entry keeps its own import.meta.url.
+		expect(code).toContain("console.log(wasm, import.meta.url)");
 	});
 
 	it("leaves installed packages and Vite's own modules to Vite", async () => {
@@ -242,6 +255,25 @@ describe("Vite dev server", () => {
 			const pkgA = await server.transformRequest("pkg-a");
 			expect(pkgA?.code).toContain(`from "${HELPER}"`);
 			expect(pkgA?.code).toContain('from "/@id/pkg-b"');
+		} finally {
+			await server.close();
+		}
+	});
+
+	it("points import.meta.url in a served CDN module at its CDN URL", async () => {
+		const server = await devServer(
+			'import { wasm } from "pkg-meta";\nconsole.log(wasm);',
+			vi.fn<FetchImpl>(async () => ({
+				ok: true,
+				status: 200,
+				url: META,
+				text: async () => cdn[META]?.body ?? "",
+			})),
+		);
+		try {
+			await server.transformRequest("/main.js");
+			const meta = await server.transformRequest("pkg-meta");
+			expect(meta?.code).toContain(`new URL("./mod.wasm", "${META}")`);
 		} finally {
 			await server.close();
 		}

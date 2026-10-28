@@ -246,7 +246,8 @@ export function importCdn(pluginOptions: ImportCdnOptions = {}): ImportCdnPlugin
 			if (!dependency) return;
 			// A rebuild from Rollup's cache reuses resolved ids and skips resolveId, but not load.
 			moduleUrls.set(key, dependency.url);
-			return rewriteImports(dependency);
+			// Vite does not apply resolveImportMeta, so the URL is inlined here instead.
+			return rewriteImports(dependency, { inlineImportMetaUrl: isVite });
 		},
 		// Bundled, `import.meta.url` would name the output chunk, so `new URL("./x.wasm",
 		// import.meta.url)` inside a CDN module would point at a local file instead of the CDN.

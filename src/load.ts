@@ -231,7 +231,10 @@ export async function loadHook(key: string, options: PluginOptions, logger: Logg
 	return rewriteImports(dependency);
 }
 
-export async function rewriteImports(dependency: Dependency) {
+// Matches `.url` after `import.meta`, but not `.urls` or an assignment a literal cannot take.
+const IMPORT_META_URL = /\s*\.\s*url(?![\w$])(?!\s*=(?!=))/y;
+
+export async function rewriteImports(dependency: Dependency, { inlineImportMetaUrl = false } = {}) {
 	await init();
 
 	const { main } = dependency;
@@ -257,7 +260,15 @@ export async function rewriteImports(dependency: Dependency) {
 	for (const { n, s, e, d } of imports) {
 		// The lexer reports `import.meta` as a record with d === -2 whose span is the
 		// `import.meta` expression itself, not a specifier.
-		if (d === -2) continue;
+		if (d === -2) {
+			if (!inlineImportMetaUrl) continue;
+			IMPORT_META_URL.lastIndex = e;
+			if (IMPORT_META_URL.test(main)) {
+				parts.push(main.slice(last, s), JSON.stringify(dependency.url));
+				last = IMPORT_META_URL.lastIndex;
+			}
+			continue;
+		}
 
 		// Dynamic imports (d > -1) are left alone. Their span is the whole argument,
 		// quotes included, so rewriting it would put the quotes inside the URL.

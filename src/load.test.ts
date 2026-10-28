@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promis
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { loadHook, resolveDependency } from "./load";
+import { loadHook, resolveDependency, rewriteImports } from "./load";
 import type { FetchImpl, PluginOptions } from "./types";
 
 const spyLogger = () => ({
@@ -521,6 +521,33 @@ export const combined = a + b;`;
 
 		expect(result).toBe(
 			'import { a } from "https://cdn.skypack.dev/a.js";\nexport const here = new URL("./b.js", import.meta.url).href;',
+		);
+	});
+
+	it("should inline import.meta.url as the served URL when asked", async () => {
+		const main = [
+			'import { a } from "./a.js";',
+			'export const here = new URL("./b.js", import.meta.url).href;',
+			"export const spaced = import.meta . url;",
+			"export const env = import.meta.env;",
+			"export const urls = import.meta.urls;",
+			"export const same = import.meta.url === location.href;",
+			"import.meta.url = here;",
+		].join("\n");
+		const url = "https://cdn.skypack.dev/-/meta@1.0.0/index.js";
+
+		const result = await rewriteImports({ name: "meta", url, main }, { inlineImportMetaUrl: true });
+
+		expect(result).toBe(
+			[
+				'import { a } from "https://cdn.skypack.dev/-/meta@1.0.0/a.js";',
+				`export const here = new URL("./b.js", "${url}").href;`,
+				`export const spaced = "${url}";`,
+				"export const env = import.meta.env;",
+				"export const urls = import.meta.urls;",
+				`export const same = "${url}" === location.href;`,
+				"import.meta.url = here;",
+			].join("\n"),
 		);
 	});
 
