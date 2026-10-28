@@ -391,6 +391,85 @@ describe("resolveDependency", () => {
 		});
 	});
 
+	describe("HTML pages", () => {
+		const portal = "https://portal.test/login";
+		const page = "<!doctype html><html><body>Sign in</body></html>";
+		const portalFetch =
+			(calls: string[] = []): FetchImpl =>
+			async (url) => {
+				calls.push(url);
+				return url.startsWith("https://cdn.skypack.dev/")
+					? { ok: true, url: portal, text: async () => page }
+					: { ok: true, url, text: async () => "export default 1;" };
+			};
+
+		it("should fall back to the next CDN when one answers 200 with an HTML page", async () => {
+			const result = await resolveDependency("vue", {
+				fetchImpl: portalFetch(),
+				priority: ["skypack", "esm.sh"],
+			});
+
+			expect(result).toEqual({ name: "vue", url: "https://esm.sh/vue", main: "export default 1;" });
+		});
+
+		it("should fail naming the page URL when no other CDN is configured", async () => {
+			await expect(resolveDependency("vue", { fetchImpl: portalFetch() })).rejects.toThrow(
+				`Failed to fetch vue from https://cdn.skypack.dev/vue: served an HTML page instead of a JavaScript module (${portal})`,
+			);
+		});
+
+		it.each([
+			"<!DOCTYPE html>\n<html></html>",
+			'  \n<html lang="en">',
+			"\uFEFF<!doctype html>",
+			"<head><title>404</title></head>",
+			"<BODY>Not found</BODY>",
+		])("should reject %j", async (body) => {
+			const fetchImpl: FetchImpl = async (url) => ({ ok: true, url, text: async () => body });
+
+			await expect(resolveDependency("https://esm.sh/x", { fetchImpl })).rejects.toThrow(
+				"served an HTML page",
+			);
+		});
+
+		it.each([
+			'<svg xmlns="http://www.w3.org/2000/svg"></svg>',
+			'export const page = "<!doctype html>";',
+			"// <html>\nexport {};",
+			"<htmlx>",
+		])("should keep %j", async (body) => {
+			const fetchImpl: FetchImpl = async (url) => ({ ok: true, url, text: async () => body });
+
+			expect((await resolveDependency("https://esm.sh/x", { fetchImpl }))?.main).toBe(body);
+		});
+
+		it("should neither cache an HTML page nor use one cached earlier", async () => {
+			const cache = await mkdtemp(path.join(tmpdir(), "import-cdn-cache-"));
+			try {
+				const calls: string[] = [];
+				const options: PluginOptions = {
+					cache,
+					fetchImpl: portalFetch(calls),
+					priority: ["skypack", "esm.sh"],
+					versions: { vue: "3.4.0" },
+				};
+				const stale = path.join(
+					cache,
+					`${createHash("sha256").update("https://cdn.skypack.dev/vue@3.4.0").digest("hex")}.json`,
+				);
+				await writeFile(stale, JSON.stringify({ url: portal, main: page }));
+
+				const result = await resolveDependency("vue", options);
+
+				expect(result?.url).toBe("https://esm.sh/vue@3.4.0");
+				expect(calls).toEqual(["https://cdn.skypack.dev/vue@3.4.0", "https://esm.sh/vue@3.4.0"]);
+				expect(JSON.parse(await readFile(stale, "utf8")).main).toBe(page);
+			} finally {
+				await rm(cache, { recursive: true, force: true });
+			}
+		});
+	});
+
 	describe("Skypack served versions", () => {
 		const served = (name: string, version: string, subpath = "/dist=es2019/index.js") =>
 			`export * from '/-/${name}@v${version}-KF3wPs9nJGEnW40cJXGo${subpath}';`;
@@ -813,17 +892,12 @@ export const combined = a + b;`;
 		expect(elapsed).toBeLessThan(500);
 	});
 
-	it("should name the module and URL when the CDN returns HTML", async () => {
-		const options: PluginOptions = {
-			fetchImpl: async () => ({
-				ok: true,
-				url: "https://portal.test/login",
-				text: async () =>
-					'<!doctype html><html><head><title>Sign in</title></head><body><a href="/x">Log in</a></body></html>',
-			}),
-		};
-
-		const error = await loadHook("portal", options).catch((e: unknown) => e);
+	it("should name the module and URL when the source is markup", async () => {
+		const error = await rewriteImports({
+			name: "portal",
+			url: "https://portal.test/login",
+			main: '<!doctype html><html><head><title>Sign in</title></head><body><a href="/x">Log in</a></body></html>',
+		}).catch((e: unknown) => e);
 
 		expect(error).toBeInstanceOf(Error);
 		expect((error as Error).message).toMatch(
