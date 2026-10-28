@@ -43,7 +43,21 @@ const DEFAULT_TIMEOUT_MS = 30_000;
 // Node runs a setTimeout longer than this after 1ms, which would time out every request.
 const MAX_TIMEOUT_MS = 2 ** 31 - 1;
 
-function validateOptions({ fetchImpl, priority, cache, integrity, timeout }: ImportCdnOptions) {
+const describeValue = (value: unknown) => {
+	if (typeof value === "string") return JSON.stringify(value);
+	if (Array.isArray(value)) return "an array";
+	if (typeof value === "object" && value !== null) return "an object";
+	return typeof value === "function" ? "a function" : String(value);
+};
+
+function validateOptions({
+	fetchImpl,
+	priority,
+	cache,
+	integrity,
+	timeout,
+	versions,
+}: ImportCdnOptions) {
 	// Called on every request, so anything else would fail each one as a network error.
 	if (fetchImpl != null && typeof fetchImpl !== "function") {
 		throw new Error(
@@ -82,6 +96,22 @@ function validateOptions({ fetchImpl, priority, cache, integrity, timeout }: Imp
 			} catch (error) {
 				throw new Error(
 					`[rollup-plugin-import-cdn] Invalid integrity for ${url}: ${(error as Error).message}`,
+				);
+			}
+		}
+	}
+	if (versions !== undefined) {
+		// A string or array was read entry by entry and matched nothing, so no package was pinned.
+		if (typeof versions !== "object" || versions === null || Array.isArray(versions)) {
+			throw new Error(
+				"[rollup-plugin-import-cdn] The versions option must be an object mapping package names or specifiers to versions.",
+			);
+		}
+		for (const [key, version] of Object.entries(versions)) {
+			// A number such as 18.10 reaches the URL as 18.1, and "" never pins anything.
+			if (typeof version !== "string" || version === "") {
+				throw new Error(
+					`[rollup-plugin-import-cdn] Invalid version for ${key}: expected a non-empty string, got ${describeValue(version)}.`,
 				);
 			}
 		}
