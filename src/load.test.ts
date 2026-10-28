@@ -349,6 +349,97 @@ describe("resolveDependency", () => {
 		});
 	});
 
+	describe("Skypack served versions", () => {
+		const served = (name: string, version: string, subpath = "/dist=es2019/index.js") =>
+			`export * from '/-/${name}@v${version}-KF3wPs9nJGEnW40cJXGo${subpath}';`;
+		const skypackServes =
+			(body: string, calls: string[] = []): FetchImpl =>
+			async (url) => {
+				calls.push(url);
+				const main = url.startsWith("https://cdn.skypack.dev/") ? body : "export default 1;";
+				return { ok: true, url, text: async () => main };
+			};
+
+		it("should fall back to the next CDN when Skypack serves another version", async () => {
+			const result = await resolveDependency("react", {
+				fetchImpl: skypackServes(served("react", "17.0.1")),
+				priority: ["skypack", "esm.sh"],
+				versions: { react: "18.2.0" },
+			});
+
+			expect(result).toEqual({
+				name: "react",
+				url: "https://esm.sh/react@18.2.0",
+				main: "export default 1;",
+			});
+		});
+
+		it("should fail naming the served version when no other CDN is configured", async () => {
+			await expect(
+				resolveDependency("react-dom/client", {
+					fetchImpl: skypackServes(served("react-dom", "17.0.1", "/dist=es2019,mode=raw/client")),
+					versions: { "react-dom": "18.2.0" },
+				}),
+			).rejects.toThrow(
+				"Failed to fetch react-dom/client from https://cdn.skypack.dev/react-dom@18.2.0/client: Skypack served version 17.0.1 instead",
+			);
+		});
+
+		it.each([
+			["the pinned version", "react@18.2.0", served("react", "18.2.0")],
+			["a prerelease pin", "react@19.0.0-rc.1", served("react", "19.0.0-rc.1")],
+			["a scoped package", "@scope/pkg@1.0.0", served("@scope/pkg", "1.0.0")],
+			["a range", "react@18", served("react", "17.0.1")],
+			["no version", "react", served("react", "17.0.1")],
+			["a body without a Skypack path", "react@18.2.0", "export default 1;"],
+			["another package's path", "react-dom@18.2.0", served("react", "17.0.1")],
+		])("should keep a response for %s", async (_, specifier, body) => {
+			const url = `https://cdn.skypack.dev/${specifier}`;
+
+			expect((await resolveDependency(url, { fetchImpl: skypackServes(body) }))?.main).toBe(body);
+		});
+
+		it("should not check a pinned URL on another host", async () => {
+			const url = "https://esm.sh/react@18.2.0";
+			const main = served("react", "17.0.1");
+			const fetchImpl: FetchImpl = async () => ({ ok: true, url, text: async () => main });
+
+			expect((await resolveDependency(url, { fetchImpl }))?.main).toBe(main);
+		});
+
+		it("should neither cache another version nor use one cached earlier", async () => {
+			const cache = await mkdtemp(path.join(tmpdir(), "import-cdn-cache-"));
+			try {
+				const calls: string[] = [];
+				const stale = path.join(
+					cache,
+					`${createHash("sha256").update("https://cdn.skypack.dev/react@18.2.0").digest("hex")}.json`,
+				);
+				const wrong = {
+					url: "https://cdn.skypack.dev/react@18.2.0",
+					main: served("react", "17.0.1"),
+				};
+				await writeFile(stale, JSON.stringify(wrong));
+
+				const result = await resolveDependency("react", {
+					cache,
+					fetchImpl: skypackServes(served("react", "17.0.1"), calls),
+					priority: ["skypack", "esm.sh"],
+					versions: { react: "18.2.0" },
+				});
+
+				expect(result?.url).toBe("https://esm.sh/react@18.2.0");
+				expect(calls).toEqual([
+					"https://cdn.skypack.dev/react@18.2.0",
+					"https://esm.sh/react@18.2.0",
+				]);
+				expect(JSON.parse(await readFile(stale, "utf8"))).toEqual(wrong);
+			} finally {
+				await rm(cache, { recursive: true, force: true });
+			}
+		});
+	});
+
 	it("should report a network error at debug level and try the next CDN", async () => {
 		const logger = spyLogger();
 		const options: PluginOptions = {

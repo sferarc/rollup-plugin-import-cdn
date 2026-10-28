@@ -63,6 +63,23 @@ function isSkypackError(value: string) {
 	return hostname === "cdn.skypack.dev" && /^\/error\/[\w-]+:/.test(pathname);
 }
 
+const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+// Skypack can serve another release for `/react@18.2.0`; its code then imports only `/-/react@v<other>-<hash>/`.
+function skypackServedVersion(requested: string, main: string): string | undefined {
+	if (!URL.canParse(requested)) return;
+	const { hostname, pathname } = new URL(requested);
+	if (hostname !== "cdn.skypack.dev") return;
+	const pin = /^\/((?:@[^/]+\/)?[^/@]+)@(\d+\.\d+\.\d+(?:-[\w.-]+)?)(?:\+[\w.-]+)?(?=\/|$)/.exec(
+		pathname,
+	);
+	const [, name, version] = pin ?? [];
+	if (!name || !version) return;
+	const prefix = `/-/${escapeRegExp(name)}@v`;
+	if (new RegExp(`${prefix}${escapeRegExp(version)}-`).test(main)) return;
+	return new RegExp(`${prefix}(\\d+\\.\\d+\\.\\d+[\\w.-]*?)-\\w+/`).exec(main)?.[1];
+}
+
 const isHttpUrl = (value: unknown): value is string =>
 	typeof value === "string" && URL.canParse(value) && /^https?:$/.test(new URL(value).protocol);
 
@@ -174,6 +191,7 @@ export async function resolveDependency(
 			if (
 				cached &&
 				!isSkypackError(cached.url) &&
+				!skypackServedVersion(cdnUrl, cached.main) &&
 				(cached.url === cdnUrl ||
 					!hasIntegrity(cdnUrl, integrity) ||
 					hasIntegrity(cached.url, integrity))
@@ -197,6 +215,12 @@ export async function resolveDependency(
 				continue;
 			}
 			const main = await response.text();
+			const served = skypackServedVersion(cdnUrl, main);
+			if (served) {
+				sawHttpError = true;
+				fail(cdnUrl, `Skypack served version ${served} instead`);
+				continue;
+			}
 			// Custom and mocked fetches can leave `url` empty; without a base the rewrite is a no-op.
 			fetched = { url: response.url || cdnUrl, main };
 		} catch (error) {
