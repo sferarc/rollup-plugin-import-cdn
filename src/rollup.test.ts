@@ -265,6 +265,41 @@ describe("Rollup build", () => {
 		expect(code).toContain(`new URL("./mod.wasm", "${PKG_WASM_REDIRECT}")`);
 	});
 
+	it("names each CDN module in the sourcemap by the URL it was served from", async () => {
+		const { fetchImpl } = mockCdn();
+		const bundle = await rollup({ input: entry, plugins: [importCdn({ fetchImpl })] });
+		const { output } = await bundle.generate({
+			format: "es",
+			sourcemap: true,
+			file: path.join(dir, "dist", "bundle.js"),
+		});
+		await bundle.close();
+
+		expect([...(output[0].map?.sources ?? [])].sort()).toEqual(
+			[PKG_A_REDIRECT, HELPER, SHARED, PKG_B, DIRECT, "../index.js", "../local.js"].sort(),
+		);
+	});
+
+	it("applies a sourcemapPathTransform to local sources only", async () => {
+		const { fetchImpl } = mockCdn();
+		const transform = vi.fn((source: string) => `src://${source}`);
+		const bundle = await rollup({ input: entry, plugins: [importCdn({ fetchImpl })] });
+		const { output } = await bundle.generate({
+			format: "es",
+			sourcemap: true,
+			file: path.join(dir, "dist", "bundle.js"),
+			sourcemapPathTransform: transform,
+		});
+		await bundle.close();
+
+		expect(output[0].map?.sources).toContain("src://../local.js");
+		expect(output[0].map?.sources).toContain(DIRECT);
+		expect(transform.mock.calls.map(([source]) => source).sort()).toEqual([
+			"../index.js",
+			"../local.js",
+		]);
+	});
+
 	it("tree-shakes an unused export of a CDN module", async () => {
 		const { fetchImpl } = mockCdn();
 		const code = await build({ input: entry, plugins: [importCdn({ fetchImpl })] });

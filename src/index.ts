@@ -189,6 +189,8 @@ interface HookContext {
 	): Promise<{ id: string } | null>;
 }
 
+type SourcemapPathTransform = (relativeSourcePath: string, sourcemapPath: string) => string;
+
 interface ImportCdnPlugin {
 	name: string;
 	// Vite runs its own resolver before unordered plugins, and it marks every URL import external.
@@ -204,6 +206,7 @@ interface ImportCdnPlugin {
 	) => Promise<string | { id: string } | undefined>;
 	load: (this: HookContext, id: string) => Promise<string | undefined>;
 	resolveImportMeta: (property: string | null, options: { moduleId: string }) => string | undefined;
+	outputOptions: <T extends { sourcemapPathTransform?: SourcemapPathTransform }>(options: T) => T;
 }
 
 export function importCdn(pluginOptions: ImportCdnOptions = {}): ImportCdnPlugin {
@@ -342,6 +345,20 @@ export function importCdn(pluginOptions: ImportCdnOptions = {}): ImportCdnPlugin
 			const url = moduleUrls.get(moduleId);
 			if (property !== "url" || url === undefined) return;
 			return JSON.stringify(url);
+		},
+		// Rollup resolves a module id against cwd for the map, so a CDN source read `../https:/host/x`.
+		outputOptions(outputOptions) {
+			const { sourcemapPathTransform: transform } = outputOptions;
+			let urlsByPath: Map<string, string> | undefined;
+			return {
+				...outputOptions,
+				sourcemapPathTransform(relativeSourcePath, sourcemapPath) {
+					urlsByPath ??= new Map([...moduleUrls].map(([id, url]) => [path.resolve(id), url]));
+					const url = urlsByPath.get(path.resolve(path.dirname(sourcemapPath), relativeSourcePath));
+					if (url !== undefined) return url;
+					return transform ? transform(relativeSourcePath, sourcemapPath) : relativeSourcePath;
+				},
+			};
 		},
 	};
 }
