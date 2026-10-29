@@ -1086,6 +1086,8 @@ describe("resolveDependency cache", () => {
 		"pkg@1.2.3-rc.1+build.5/sub.js",
 		"pkg@1.2.3?dev",
 		"npm/pkg@1.2.3/+esm",
+		"-/pkg@v1.2.3-yH0aYV1FOvoIPeKBbHxg/dist=es2019,mode=imports/optimized/pkg.js",
+		"-/@scope/pkg@v1.2.3-rc.1-K6GEbP02mWFnLA45zAmi/dist=es2019,mode=imports/optimized/sub.js",
 	])("should cache the pinned URL %s", async (specifier) => {
 		const calls: string[] = [];
 		const options: PluginOptions = { cache, fetchImpl: countingFetch(calls) };
@@ -1108,6 +1110,8 @@ describe("resolveDependency cache", () => {
 		"pkg",
 		"pkg@latest?alias=dep@1.2.3",
 		"pkg#@1.2.3",
+		"pkg@v1.2.3",
+		"-/pkg@v1.2-yH0aYV1FOvoIPeKBbHxg/index.js",
 	])("should not cache the unpinned URL %s", async (specifier) => {
 		const calls: string[] = [];
 		const options: PluginOptions = { cache, fetchImpl: countingFetch(calls) };

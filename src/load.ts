@@ -59,10 +59,15 @@ function pinnedVersion(key: string, versions: PluginOptions["versions"]) {
 	return subpath.startsWith("@") ? undefined : entries.get(name);
 }
 
-// Only the path names the package version; a query or fragment can carry any text.
+// Only the path names the package version; a query or fragment can carry any text. Skypack
+// serves the code itself from `/-/<pkg>@v<x.y.z>-<hash>/...`, which is pinned too.
 function isPinnedUrl(value: string) {
 	if (!URL.canParse(value)) return false;
-	return /@\d+\.\d+\.\d+(?:-[\w.-]+)?(?:\+[\w.-]+)?(?=\/|$)/.test(new URL(value).pathname);
+	const { pathname } = new URL(value);
+	return (
+		/@\d+\.\d+\.\d+(?:-[\w.-]+)?(?:\+[\w.-]+)?(?=\/|$)/.test(pathname) ||
+		/^\/-\/(?:@[^/]+\/)?[^/@]+@v\d+\.\d+\.\d+-[\w.-]+\//.test(pathname)
+	);
 }
 
 // Skypack serves an unbuildable package as HTTP 200 from `/error/build:<pkg>`, a module that throws.
