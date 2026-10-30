@@ -16,7 +16,7 @@ The `release` job only runs when the repository variable `RELEASE_ENABLED` is `t
 
 ## Authentication
 
-npm trusted publishing only: the job has `id-token: write`, and npm exchanges the OIDC token for a publish credential, so no npm token is stored (`release.yml`). `package.json` `publishConfig` sets public access and provenance. The trusted publisher on npmjs.com must name this repository and `release.yml`; whether it is configured is unknown from the repository, and creating it is an owner step on npmjs.com. Trusted publishing needs npm 11.5.1 or newer, which comes from the Node in `mise.toml`. The workflow is ready on the repository side: `id-token: write`, `publishConfig.provenance`, and a mise-action pin at v5.2.1.
+npm trusted publishing only: the job has `id-token: write`, and npm exchanges the OIDC token for a publish credential, so no npm token is stored (`release.yml`). `package.json` `publishConfig` sets public access and provenance. The trusted publisher on npmjs.com must name this repository and `release.yml`; whether it is configured is unknown from the repository, and creating it is an owner step on npmjs.com. Trusted publishing needs npm 11.5.1 or newer, which comes from the Node in `mise.toml`. The workflow is ready on the repository side: `id-token: write`, `publishConfig.provenance`, and the `jdx/mise-action` step that installs that Node (its pinned version is in `release.yml`, which the weekly action update moves).
 
 ## History
 
@@ -24,7 +24,7 @@ Before this repository existed the plugin lived in the SferaDev/SferaDev monorep
 
 ## First release
 
-On 2026-10-23 the 33 pending changesets in `.changeset/` (every `.md` file there but `README.md`) are all `minor` or `patch` (the `minor` ones are `fetch-cache.md`, `fetch-timeout.md`, `integrity-option.md` and `esm-sh-builtin.md`), and `changeset status` reports one `minor` bump for `rollup-plugin-import-cdn`, so the first run with `RELEASE_ENABLED` on opens a version pull request for `0.4.0`.
+On 2026-10-30 the 52 pending changesets in `.changeset/` (every `.md` file there but `README.md`) are all `minor` or `patch` (the `minor` ones are `fetch-cache.md`, `fetch-timeout.md`, `integrity-option.md`, `esm-sh-builtin.md`, `jsdelivr-builtin.md` and `priority-skip.md`), and `changeset status` reports one `minor` bump for `rollup-plugin-import-cdn`, so the first run with `RELEASE_ENABLED` on opens a version pull request for `0.4.0`.
 
 The tag format is `v<version>`, for example `v0.4.0`. `@changesets/cli` tags `<name>@<version>` only for monorepo tools and `v<version>` for a `root` tool (`gitTags.mjs`), and `@manypkg/get-packages` reports this repository as `root`. The older `rollup-plugin-import-cdn@0.3.x` tags came from the monorepo.
 
