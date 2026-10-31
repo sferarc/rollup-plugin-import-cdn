@@ -191,6 +191,12 @@ interface HookContext {
 
 type SourcemapPathTransform = (relativeSourcePath: string, sourcemapPath: string) => string;
 
+// Rollup added `output.sourcemapIgnoreList` in 3.16 and warns about it as unknown before that.
+const hasSourcemapIgnoreList = (rollupVersion: string) => {
+	const [major = 0, minor = 0] = rollupVersion.split(".").map(Number);
+	return major > 3 || (major === 3 && minor >= 16);
+};
+
 interface ImportCdnPlugin {
 	name: string;
 	// Vite runs its own resolver before unordered plugins, and it marks every URL import external.
@@ -206,7 +212,12 @@ interface ImportCdnPlugin {
 	) => Promise<string | { id: string } | undefined>;
 	load: (this: HookContext, id: string) => Promise<string | undefined>;
 	resolveImportMeta: (property: string | null, options: { moduleId: string }) => string | undefined;
-	outputOptions: <T extends { sourcemapPathTransform?: SourcemapPathTransform }>(options: T) => T;
+	outputOptions: <
+		T extends { sourcemapPathTransform?: SourcemapPathTransform; sourcemapIgnoreList?: unknown },
+	>(
+		this: { meta: { rollupVersion: string } },
+		options: T,
+	) => T;
 }
 
 export function importCdn(pluginOptions: ImportCdnOptions = {}): ImportCdnPlugin {
@@ -348,13 +359,24 @@ export function importCdn(pluginOptions: ImportCdnOptions = {}): ImportCdnPlugin
 		},
 		// Rollup resolves a module id against cwd for the map, so a CDN source read `../https:/host/x`.
 		outputOptions(outputOptions) {
-			const { sourcemapPathTransform: transform } = outputOptions;
+			const { sourcemapPathTransform: transform, sourcemapIgnoreList } = outputOptions;
 			let urlsByPath: Map<string, string> | undefined;
+			const cdnUrl = (relativeSourcePath: string, sourcemapPath: string) => {
+				urlsByPath ??= new Map([...moduleUrls].map(([id, url]) => [path.resolve(id), url]));
+				return urlsByPath.get(path.resolve(path.dirname(sourcemapPath), relativeSourcePath));
+			};
+			// Unset, Rollup ignores only `node_modules`; CDN modules are third-party code as well.
+			const ignoreCdnSources =
+				sourcemapIgnoreList === undefined && hasSourcemapIgnoreList(this.meta.rollupVersion);
 			return {
 				...outputOptions,
+				...(ignoreCdnSources && {
+					sourcemapIgnoreList: (relativeSourcePath: string, sourcemapPath: string) =>
+						cdnUrl(relativeSourcePath, sourcemapPath) !== undefined ||
+						relativeSourcePath.includes("node_modules"),
+				}),
 				sourcemapPathTransform(relativeSourcePath, sourcemapPath) {
-					urlsByPath ??= new Map([...moduleUrls].map(([id, url]) => [path.resolve(id), url]));
-					const url = urlsByPath.get(path.resolve(path.dirname(sourcemapPath), relativeSourcePath));
+					const url = cdnUrl(relativeSourcePath, sourcemapPath);
 					if (url !== undefined) return url;
 					return transform ? transform(relativeSourcePath, sourcemapPath) : relativeSourcePath;
 				},

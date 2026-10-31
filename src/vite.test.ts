@@ -119,14 +119,21 @@ describe("Vite build", () => {
 			build: { write: false, minify: false, sourcemap: true },
 			plugins: [cdnPlugin(mockCdn())],
 		});
-		const sources = (Array.isArray(result) ? result : [result])
+		const maps = (Array.isArray(result) ? result : [result])
 			.flatMap((output) => ("output" in output ? output.output : []))
-			.flatMap((chunk) => (chunk.type === "chunk" ? (chunk.map?.sources ?? []) : []));
+			.flatMap((chunk) => (chunk.type === "chunk" && chunk.map ? [chunk.map] : []));
+		const sources = maps.flatMap((map) => map.sources);
+		const ignored = maps.flatMap((map) =>
+			(map.x_google_ignoreList ?? []).map((index) => map.sources[index]),
+		);
 
 		expect(sources).toContain(PKG_A_REDIRECT);
 		expect(sources.filter((source) => !source.startsWith("https://"))).toEqual([
 			expect.stringMatching(/(^|\/)main\.js$/),
 		]);
+		expect(ignored.sort()).toEqual(
+			sources.filter((source) => source.startsWith("https://")).sort(),
+		);
 	});
 
 	it("leaves installed packages and Vite's own modules to Vite", async () => {
