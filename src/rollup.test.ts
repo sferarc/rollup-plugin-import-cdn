@@ -9,6 +9,7 @@ import {
 	type RollupOptions,
 	type RollupWatchOptions,
 	rollup,
+	type SourceMap,
 	VERSION,
 	watch,
 } from "rollup";
@@ -70,6 +71,13 @@ function mockCdn(extra: typeof cdn = {}) {
 // `logLevel` and `onLog` arrived in Rollup 3.25; the CI Rollup 3 leg runs 3.0.
 const [major = 0, minor = 0] = VERSION.split(".").map(Number);
 const hasOnLog = major > 3 || (major === 3 && minor >= 25);
+const hasSourcemapIgnoreList = major > 3 || (major === 3 && minor >= 16);
+
+// Rollup writes `x_google_ignoreList` on output maps but leaves it out of the `SourceMap` type.
+const ignoredSources = (map: SourceMap | null) =>
+	(map as { x_google_ignoreList?: number[] } | null)?.x_google_ignoreList?.map(
+		(index) => map?.sources[index],
+	);
 
 async function build(options: RollupOptions) {
 	const bundle = await rollup({ onwarn: (warning) => expect.fail(warning.message), ...options });
@@ -299,6 +307,48 @@ describe("Rollup build", () => {
 			"../local.js",
 		]);
 	});
+
+	it("puts each CDN module on the sourcemap ignore list", async () => {
+		const { fetchImpl } = mockCdn();
+		const warnings: string[] = [];
+		const bundle = await rollup({
+			input: entry,
+			plugins: [importCdn({ fetchImpl })],
+			onwarn: (warning) => warnings.push(warning.message),
+		});
+		const { output } = await bundle.generate({
+			format: "es",
+			sourcemap: true,
+			file: path.join(dir, "dist", "bundle.js"),
+		});
+		await bundle.close();
+
+		const ignored = ignoredSources(output[0].map);
+		// Before 3.16 Rollup has no ignore list and would warn about the option as unknown.
+		expect(ignored?.sort()).toEqual(
+			hasSourcemapIgnoreList ? [PKG_A_REDIRECT, HELPER, SHARED, PKG_B, DIRECT].sort() : undefined,
+		);
+		expect(warnings).toEqual([]);
+	});
+
+	it.skipIf(!hasSourcemapIgnoreList)(
+		"leaves a sourcemapIgnoreList of your own in charge of every source",
+		async () => {
+			const { fetchImpl } = mockCdn();
+			const ignoreList = vi.fn((source: string) => source.endsWith("local.js"));
+			const bundle = await rollup({ input: entry, plugins: [importCdn({ fetchImpl })] });
+			const { output } = await bundle.generate({
+				format: "es",
+				sourcemap: true,
+				file: path.join(dir, "dist", "bundle.js"),
+				sourcemapIgnoreList: ignoreList,
+			});
+			await bundle.close();
+
+			expect(ignoredSources(output[0].map)).toEqual(["../local.js"]);
+			expect(ignoreList).toHaveBeenCalledTimes(7);
+		},
+	);
 
 	it("tree-shakes an unused export of a CDN module", async () => {
 		const { fetchImpl } = mockCdn();
