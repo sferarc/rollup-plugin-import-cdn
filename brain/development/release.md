@@ -8,7 +8,7 @@ Releases use changesets (`.changeset/config.json`, `.changeset/README.md`), and 
 2. On a push to `main`, `.github/workflows/release.yml` runs `changesets/action`, which opens or updates a version pull request that bumps `package.json` and writes `CHANGELOG.md`.
 3. Merging that pull request runs the workflow again, which runs `pnpm release` (`pnpm build && changeset publish`).
 
-The action uses the `GIT_TOKEN` secret rather than `github.token`, because a version pull request merged by the Actions bot would push to `main` without triggering the workflow, and nothing would publish (comment in `release.yml`).
+The action uses a `sferarc-hq` App token rather than `github.token`, because a version pull request merged by the Actions bot would push to `main` without triggering the workflow, and nothing would publish (comment in `release.yml`). The first step mints it with `actions/create-github-app-token` from the org secrets `HQ_APP_ID` and `HQ_APP_PRIVATE_KEY`, scoped to this repository with `contents` and `pull-requests` write, so version commits and the version pull request are authored by `sferarc-hq[bot]`. An App token, unlike `github.token`, still triggers `pull_request` workflows, so the version pull request gets the required `Check` job.
 
 ## Disabled until the owner enables it
 
@@ -28,4 +28,4 @@ On 2026-10-30 the 51 pending changesets in `.changeset/` (every `.md` file there
 
 The tag format is `v<version>`, for example `v0.4.0`. `@changesets/cli` tags `<name>@<version>` only for monorepo tools and `v<version>` for a `root` tool (`gitTags.mjs`), and `@manypkg/get-packages` reports this repository as `root`. The older `rollup-plugin-import-cdn@0.3.x` tags came from the monorepo.
 
-Order for the owner: create the npm trusted publisher for this repository and `release.yml`, then set `RELEASE_ENABLED` to `true`. Setting the variable starts nothing by itself: the first run needs the next push to `main` or a `workflow_dispatch` of `release.yml`. The `GIT_TOKEN` secret that `release.yml` uses already exists as an org secret visible to this repository.
+Order for the owner: create the npm trusted publisher for this repository and `release.yml`, then set `RELEASE_ENABLED` to `true`. Setting the variable starts nothing by itself: the first run needs the next push to `main` or a `workflow_dispatch` of `release.yml`. Before that, the `HQ_APP_ID` and `HQ_APP_PRIVATE_KEY` org secrets that `release.yml` uses must be visible to this repository: on 2026-10-31 both have `selected` visibility and this repository is not selected (`gh api repos/sferarc/rollup-plugin-import-cdn/actions/organization-secrets` lists only `GIT_TOKEN`), so the token step would fail.
