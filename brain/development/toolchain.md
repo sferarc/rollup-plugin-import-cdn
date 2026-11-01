@@ -24,7 +24,8 @@ pnpm lint              # biome check, read-only
 pnpm fix               # biome check --write
 pnpm knip              # unused files, exports and dependencies
 pnpm typecheck         # tsc --noEmit
-pnpm test              # vitest run
+pnpm test              # vitest run over src/, no network
+pnpm test:live         # live/ against the real CDNs, see development/testing
 pnpm build             # bunchee, emits dist/index.{mjs,cjs,d.ts}
 pnpm is-tree-shakable  # checks the built package
 pnpm changeset         # describe a change for the next release

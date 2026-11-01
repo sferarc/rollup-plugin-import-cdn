@@ -1,6 +1,6 @@
 # Testing
 
-`pnpm test` runs vitest in a Node environment with `restoreMocks: true` (`vitest.config.ts`) over `src/*.test.ts`. Globals are off since #35, so each test file imports what it uses (`describe`, `it`, `expect`, `vi`, hooks) from `vitest`, and `restoreMocks` restores spies between tests. On 2026-10-30 the suite was 6 files and 304 tests (`it.each` cases counted separately), about two seconds wall clock on an idle machine; under heavy load the watch-mode rebuild test in `src/rollup.test.ts` can exceed the 5 s default timeout, so rerun it alone before treating a failure as real.
+`pnpm test` runs vitest in a Node environment with `restoreMocks: true` (`vitest.config.ts`) over `src/**/*.test.ts`, the config's `include`, so `live/` stays out of it. Globals are off since #35, so each test file imports what it uses (`describe`, `it`, `expect`, `vi`, hooks) from `vitest`, and `restoreMocks` restores spies between tests. On 2026-10-30 the suite was 6 files and 304 tests (`it.each` cases counted separately), about two seconds wall clock on an idle machine; under heavy load the watch-mode rebuild test in `src/rollup.test.ts` can exceed the 5 s default timeout, so rerun it alone before treating a failure as real.
 
 | File | Covers |
 | --- | --- |
@@ -13,7 +13,11 @@
 
 `src/index.test.ts` and `src/integration.test.ts` call hooks through `hooks(plugin)` from `src/test-utils.ts`, which unwraps the function or `{ handler }` form and calls it with Rollup's hook types and a fake context from `fakeContext()` that records `warn` and `debug` into the returned `logs` (`fakeContext({ withDebug: false })` mimics Rollup 3 before 3.25), so a hook signature change fails typecheck in the tests. Only test files import it, so it stays out of `dist` and knip sees it as used.
 
-Every test uses a mock `fetchImpl`; nothing touches the network. Watch mode runs with Rollup's `cache` on (watch cannot turn it off), so a rebuild resolves only the entry again; the `buildStart` reset is covered by the plain two-build test above. Real CDNs and the network are not covered. The local suite runs against the catalog Rollup pin in `pnpm-workspace.yaml`; CI also runs it on Rollup 3.0.0 since #71 (see [[ci]]), where the `onLog` test is skipped because `logLevel` and `onLog` need 3.25.
+Every test uses a mock `fetchImpl`; nothing touches the network. Watch mode runs with Rollup's `cache` on (watch cannot turn it off), so a rebuild resolves only the entry again; the `buildStart` reset is covered by the plain two-build test above. Real CDNs are covered only by the live check below. The local suite runs against the catalog Rollup pin in `pnpm-workspace.yaml`; CI also runs it on Rollup 3.0.0 since #71 (see [[ci]]), where the `onLog` test is skipped because `logLevel` and `onLog` need 3.25.
+
+## Live check
+
+`pnpm test:live` runs `live/cdn.test.ts` with `vitest.live.config.ts` (60 second test timeout) against the real CDNs through the global `fetch` (#115). For each of `skypack`, `esm.sh` and `jsdelivr` it builds `preact` and `preact/hooks` pinned to `10.19.3` with `cache` set, expects one chunk with no import left and no module id naming another `preact` version, then rebuilds with a `fetchImpl` that throws and expects the same code, so every URL the real CDN serves for that graph matches the cache's pinned-URL rules. A second test expects a package that does not exist to fail the build with an HTTP 4xx naming it. On jsDelivr the hooks module's `/npm/preact@10.19.3/+esm` import dedupes onto the `preact` id, so no module id carries a version there and the version assertion only bites on Skypack and esm.sh. It passed locally on 2026-11-01 in about two seconds. It runs weekly in CI ([[ci]], "Live CDN"), never in `pnpm check`.
 
 ## Related
 
