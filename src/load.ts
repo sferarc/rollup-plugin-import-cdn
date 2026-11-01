@@ -162,7 +162,7 @@ function resolveDependencyUrls(key: string, options: PluginOptions): string[] {
 
 	if (isUrl(key)) return [key];
 
-	const priorities = options.priority ?? ["skypack"];
+	const priorities = options.priority ?? ["esm.sh"];
 	const version = pinnedVersion(key, options.versions);
 	// An npm name has no `:` and does not start with `#`, so `virtual:x`, `data:...` or a
 	// package.json `imports` key such as `#internal` belongs to another plugin, not a built-in

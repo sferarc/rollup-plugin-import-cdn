@@ -162,7 +162,7 @@ describe("importCdn", () => {
 	it("should use global fetch when available", () => {
 		const mockFetch = vi.fn().mockResolvedValue({
 			ok: true,
-			url: "https://cdn.skypack.dev/test",
+			url: "https://esm.sh/test",
 			text: async () => "export const test = true;",
 		});
 
@@ -177,7 +177,7 @@ describe("importCdn", () => {
 
 	it("should use provided fetchImpl over global fetch", async () => {
 		const customFetch = createMockFetch({
-			"https://cdn.skypack.dev/custom": 'export const custom = "yes";',
+			"https://esm.sh/custom": 'export const custom = "yes";',
 		});
 
 		const plugin = importCdn({ fetchImpl: customFetch });
@@ -192,7 +192,7 @@ describe("importCdn", () => {
 		it("should resolve CDN package names", async () => {
 			const plugin = importCdn({
 				fetchImpl: createMockFetch({
-					"https://cdn.skypack.dev/lodash": 'export const _ = "lodash";',
+					"https://esm.sh/lodash": 'export const _ = "lodash";',
 				}),
 			});
 
@@ -227,7 +227,7 @@ describe("importCdn", () => {
 			expect(logs.warn).toHaveLength(1);
 			expect(logs.warn[0]).toMatch(/^Could not resolve dependency nonexistent\n/);
 			expect(logs.debug).toEqual([
-				"Failed to fetch nonexistent from https://cdn.skypack.dev/nonexistent: Not found: https://cdn.skypack.dev/nonexistent",
+				"Failed to fetch nonexistent from https://esm.sh/nonexistent: Not found: https://esm.sh/nonexistent",
 			]);
 			expect(warn).not.toHaveBeenCalled();
 		});
@@ -250,7 +250,7 @@ describe("importCdn", () => {
 			const moduleContent = "export const value = 42;";
 			const plugin = importCdn({
 				fetchImpl: createMockFetch({
-					"https://cdn.skypack.dev/my-package": moduleContent,
+					"https://esm.sh/my-package": moduleContent,
 				}),
 			});
 
@@ -264,14 +264,14 @@ describe("importCdn", () => {
 			const moduleContent = 'import { util } from "./util.js";\nexport { util };';
 			const plugin = importCdn({
 				fetchImpl: createMockFetch({
-					"https://cdn.skypack.dev/my-package": moduleContent,
+					"https://esm.sh/my-package": moduleContent,
 				}),
 			});
 
 			const { load } = hooks(plugin);
 			const result = await load("my-package");
 
-			expect(result).toContain("https://cdn.skypack.dev/util.js");
+			expect(result).toContain("https://esm.sh/util.js");
 		});
 	});
 
@@ -293,7 +293,7 @@ describe("importCdn", () => {
 		it("should respect version pinning", async () => {
 			const plugin = importCdn({
 				fetchImpl: createMockFetch({
-					"https://cdn.skypack.dev/react@18.2.0": "export const React = {};",
+					"https://esm.sh/react@18.2.0": "export const React = {};",
 				}),
 				versions: {
 					react: "18.2.0",
@@ -308,9 +308,7 @@ describe("importCdn", () => {
 	});
 	describe("fetch memoization", () => {
 		it("fetches a module once for resolveId followed by load", async () => {
-			const fetchImpl = vi.fn(
-				createMockFetch({ "https://cdn.skypack.dev/memo": "export const memo = 1;" }),
-			);
+			const fetchImpl = vi.fn(createMockFetch({ "https://esm.sh/memo": "export const memo = 1;" }));
 			const plugin = importCdn({ fetchImpl });
 			const { resolveId, load } = hooks(plugin);
 
@@ -320,9 +318,7 @@ describe("importCdn", () => {
 		});
 
 		it("refetches after buildStart", async () => {
-			const fetchImpl = vi.fn(
-				createMockFetch({ "https://cdn.skypack.dev/memo": "export const memo = 1;" }),
-			);
+			const fetchImpl = vi.fn(createMockFetch({ "https://esm.sh/memo": "export const memo = 1;" }));
 			const plugin = importCdn({ fetchImpl });
 			const { buildStart, resolveId, load } = hooks(plugin);
 
@@ -408,12 +404,12 @@ describe("importCdn", () => {
 			vi.useFakeTimers();
 			try {
 				const fetchImpl = vi.fn(
-					createMockFetch({ "https://cdn.skypack.dev/memo": "export const memo = 1;" }),
+					createMockFetch({ "https://esm.sh/memo": "export const memo = 1;" }),
 				);
 				const { resolveId } = hooks(importCdn({ fetchImpl, timeout: 0 }));
 
 				expect(await resolveId("memo")).toBe("memo");
-				expect(fetchImpl).toHaveBeenCalledWith("https://cdn.skypack.dev/memo");
+				expect(fetchImpl).toHaveBeenCalledWith("https://esm.sh/memo");
 				expect(vi.getTimerCount()).toBe(0);
 			} finally {
 				vi.useRealTimers();

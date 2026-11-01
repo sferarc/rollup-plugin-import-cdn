@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, type MockInstance, vi } fr
 import { importCdn } from "./index";
 import type { FetchImpl } from "./types";
 
+// The fixture CDN has Skypack's URL shapes, so the plugin is given `priority: ["skypack"]`.
 const PKG_A = "https://cdn.skypack.dev/pkg-a";
 const PKG_A_REDIRECT = "https://cdn.skypack.dev/-/pkg-a@1.0.0/dist/index.js";
 const HELPER = "https://cdn.skypack.dev/-/pkg-a@1.0.0/dist/helper.js";
@@ -30,7 +31,7 @@ const cdn: Record<string, { url?: string; body: string }> = {
 };
 
 // No cast: a TypeScript Vite config takes the plugin as typed, so typecheck guards it.
-const cdnPlugin = (fetchImpl: FetchImpl): Plugin => importCdn({ fetchImpl });
+const cdnPlugin = (fetchImpl: FetchImpl): Plugin => importCdn({ fetchImpl, priority: ["skypack"] });
 
 function mockCdn() {
 	return vi.fn<FetchImpl>(async (url) => {
