@@ -1,0 +1,44 @@
+name: Live CDN
+
+# Outside ci.yml so a CDN outage never blocks a pull request; a failed scheduled run files an issue.
+
+on:
+  schedule:
+    - cron: "17 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  live:
+    name: Live CDN
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: jdx/mise-action@82a612c5ab8bcda7cc5db6b7e81a8e7584c3dc6e # v5.2.3
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Test against the real CDNs
+        run: pnpm test:live
+
+      - name: Report the failure
+        if: failure() && github.event_name == 'schedule'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          title="Live CDN check failed"
+          open=$(gh issue list --state open --search "\"$title\" in:title" --json number --jq '.[0].number')
+          if [ -n "$open" ]; then
+            gh issue comment "$open" --body "Failed again: $RUN_URL"
+          else
+            gh issue create --title "$title" \
+              --label product:rollup-plugin-import-cdn --label bug --label p2 \
+              --body "The weekly build through the real CDNs failed: $RUN_URL. Read the failing test in \`live/cdn.test.ts\`, recheck the CDN with \`curl\` and record what changed in \`brain/architecture/resolution.md\`."
+          fi

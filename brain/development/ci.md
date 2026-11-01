@@ -34,6 +34,10 @@ On 2026-10-23 a brain-maintenance shift ran all seven checks of `pnpm check` on 
 
 The suite passed on Rollup 3.0.0 apart from the `onLog` test, which `src/rollup.test.ts` skips below 3.25 (`it.skipIf` on `VERSION` from `rollup`). No change to the peer range was needed. Run it locally the same way: edit the catalog line, `pnpm install --no-frozen-lockfile`, `pnpm exec vitest run`, then `git checkout pnpm-workspace.yaml pnpm-lock.yaml`.
 
+## Live CDN
+
+`.github/workflows/live-cdn.yml` runs `pnpm test:live` ([[testing]], "Live check") on Mondays at 06:17 UTC and on `workflow_dispatch`, on `ubuntu-latest` (#115). It is a separate workflow, not a job in `ci.yml`, so a CDN outage never fails a pull request. When a scheduled run fails, a last step uses `github.token` with `issues: write` to open an issue titled "Live CDN check failed" labelled `product:rollup-plugin-import-cdn`, `bug` and `p2`, or to comment the run link on the one already open. A manual run only shows its result in the Actions tab.
+
 ## Branch rules on `main`
 
 The `main-default` ruleset, read from the GitHub API on 2026-10-08: `Check` is the one required status check, changes go through pull requests with squash or rebase merges, history is linear, and force pushes and deletion are blocked. That reading predates `Test (minimum Node)` and `Test (Rollup 3.0)`; whether the ruleset now requires either is unknown until the ruleset is read again.
