@@ -25,4 +25,4 @@ Cheapest and they guard the options users already rely on.
 
 ## Open
 
-Nothing. Items 1 to 3 merged before any release, so the question of releasing before or after them no longer applies. The first release still waits on the owner ([[decisions/2026-10-08-release-off-until-enabled]], [[development/release]]).
+Nothing. Items 1 to 3 merged before any release, so the question of releasing before or after them no longer applies. The first release is tracked in [#111](https://github.com/sferarc/rollup-plugin-import-cdn/issues/111) ([[decisions/2026-10-08-release-off-until-enabled]], [[development/release]]).
