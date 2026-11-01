@@ -414,6 +414,106 @@ describe("resolveDependency", () => {
 		});
 	});
 
+	describe("jsDelivr build errors", () => {
+		// As served for https://cdn.jsdelivr.net/npm/fsevents@2.3.3/+esm on 2026-11-01.
+		const reason =
+			"Failed to bundle using Rollup v4.62.2 and esbuild v0.28.1: failed to resolve an internal import.";
+		const errorBody = [
+			"/**",
+			` * ${reason}`,
+			" * If you believe this to be an issue with jsDelivr, and not with the package itself, please open an issue at https://github.com/jsdelivr/jsdelivr",
+			" */",
+			"",
+			` throw new Error("${reason}");`,
+		].join("\n");
+		const jsdelivrFetch =
+			(calls: string[] = []): FetchImpl =>
+			async (url) => {
+				calls.push(url);
+				const body = url.startsWith("https://cdn.jsdelivr.net/") ? errorBody : "export default 1;";
+				return { ok: true, url, text: async () => body };
+			};
+
+		it("should fall back to the next CDN when jsDelivr cannot build the package", async () => {
+			const result = await resolveDependency("fsevents", {
+				fetchImpl: jsdelivrFetch(),
+				priority: ["jsdelivr", "esm.sh"],
+			});
+
+			expect(result).toEqual({
+				name: "fsevents",
+				url: "https://esm.sh/fsevents",
+				main: "export default 1;",
+			});
+		});
+
+		it("should fail with jsDelivr's reason when no other CDN is configured", async () => {
+			await expect(
+				resolveDependency("fsevents", { fetchImpl: jsdelivrFetch(), priority: ["jsdelivr"] }),
+			).rejects.toThrow(
+				`Failed to fetch fsevents from https://cdn.jsdelivr.net/npm/fsevents/+esm: jsDelivr could not build the package (${reason})`,
+			);
+		});
+
+		it("should fail on a direct import of a +esm URL", async () => {
+			const url = "https://cdn.jsdelivr.net/npm/fsevents@2.3.3/+esm";
+
+			await expect(resolveDependency(url, { fetchImpl: jsdelivrFetch() })).rejects.toThrow(
+				"jsDelivr could not build the package",
+			);
+		});
+
+		it.each([
+			[
+				"a +esm module that mentions the message later",
+				"https://cdn.jsdelivr.net/npm/x/+esm",
+				`export const m = "x";\n${errorBody}`,
+			],
+			[
+				"a file that is not a +esm build",
+				"https://cdn.jsdelivr.net/npm/x@1.0.0/index.js",
+				errorBody,
+			],
+			["another host", "https://esm.sh/x/+esm", errorBody],
+			[
+				"a license comment",
+				"https://cdn.jsdelivr.net/npm/x/+esm",
+				"/**\n * Bundled by jsDelivr using Rollup v4.62.2 and esbuild v0.28.1.\n */\nexport {};",
+			],
+		])("should keep %s", async (_, url, body) => {
+			const fetchImpl: FetchImpl = async () => ({ ok: true, url, text: async () => body });
+
+			expect((await resolveDependency(url, { fetchImpl }))?.main).toBe(body);
+		});
+
+		it("should neither cache a build error nor use one cached earlier", async () => {
+			const cache = await mkdtemp(path.join(tmpdir(), "import-cdn-cache-"));
+			try {
+				const calls: string[] = [];
+				const requested = "https://cdn.jsdelivr.net/npm/fsevents@2.3.3/+esm";
+				const options: PluginOptions = {
+					cache,
+					fetchImpl: jsdelivrFetch(calls),
+					priority: ["jsdelivr", "esm.sh"],
+					versions: { fsevents: "2.3.3" },
+				};
+				const stale = path.join(
+					cache,
+					`${createHash("sha256").update(requested).digest("hex")}.json`,
+				);
+				await writeFile(stale, JSON.stringify({ url: requested, main: errorBody }));
+
+				const result = await resolveDependency("fsevents", options);
+
+				expect(result?.url).toBe("https://esm.sh/fsevents@2.3.3");
+				expect(calls).toEqual([requested, "https://esm.sh/fsevents@2.3.3"]);
+				expect(JSON.parse(await readFile(stale, "utf8")).main).toBe(errorBody);
+			} finally {
+				await rm(cache, { recursive: true, force: true });
+			}
+		});
+	});
+
 	describe("HTML pages", () => {
 		const portal = "https://portal.test/login";
 		const page = "<!doctype html><html><body>Sign in</body></html>";
