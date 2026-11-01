@@ -180,6 +180,11 @@ describe("resolveDependency", () => {
 		["react@17/jsx-runtime", { react: "18.2.0" }, "react@17/jsx-runtime"],
 		["react?dev", { react: "18.2.0" }, "react@18.2.0?dev"],
 		["react-dom/client?dev", { "react-dom": "18.2.0" }, "react-dom@18.2.0/client?dev"],
+		[
+			"react-dom?deps=scheduler@0.23.2",
+			{ "react-dom": "18.2.0" },
+			"react-dom@18.2.0?deps=scheduler@0.23.2",
+		],
 	])("should build the esm.sh URL for %s (%j)", async (key, versions, path) => {
 		const options: PluginOptions = {
 			fetchImpl: createMockFetch({ [`https://esm.sh/${path}`]: "export {};" }),

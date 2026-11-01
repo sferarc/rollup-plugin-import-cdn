@@ -50,6 +50,42 @@ const cdn: Record<string, { url?: string; body: string }> = {
 	},
 };
 
+// esm.sh shapes seen with curl on 2026-11-01: pinned stubs, minified imports, a range and a /node/ polyfill.
+const ESM_SH_LIB = "https://esm.sh/lib@1.0.0/es2022/lib.mjs";
+// The rewrite resolves `/sched@^1.0.0` with `URL`, which encodes `^`; esm.sh serves both forms.
+const ESM_SH_SCHED_RANGE = "https://esm.sh/sched@%5E1.0.0?target=es2022";
+const esmShLibStub = {
+	body: '/* esm.sh - lib@1.0.0 */\nexport * from "/lib@1.0.0/es2022/lib.mjs";',
+};
+const esmShLibDomStub = {
+	body: [
+		"/* esm.sh - lib-dom@1.0.0 */",
+		'import "/lib@1.0.0/es2022/lib.mjs";',
+		'import "/node/process.mjs";',
+		'export * from "/lib-dom@1.0.0/es2022/lib-dom.mjs";',
+	].join("\n"),
+};
+const esmShGraph: typeof cdn = {
+	"https://esm.sh/lib": esmShLibStub,
+	"https://esm.sh/lib@1.0.0": esmShLibStub,
+	"https://esm.sh/lib-dom": esmShLibDomStub,
+	"https://esm.sh/lib-dom@1.0.0": esmShLibDomStub,
+	[ESM_SH_LIB]: { body: 'export const state = { id: "LIB_STATE" };' },
+	"https://esm.sh/lib-dom@1.0.0/es2022/lib-dom.mjs": {
+		body: 'import*as __0$ from"/lib@1.0.0/es2022/lib.mjs";import*as __1$ from"/sched@^1.0.0?target=es2022";export const root=()=>__0$.state.id+__1$.tick;',
+	},
+	[ESM_SH_SCHED_RANGE]: {
+		body: '/* esm.sh - sched@1.0.2 */\nexport * from "/sched@1.0.2/es2022/sched.mjs";',
+	},
+	"https://esm.sh/sched@1.0.2/es2022/sched.mjs": { body: 'export const tick = "SCHED_TICK";' },
+	"https://esm.sh/node/process.mjs": { body: "globalThis.NODE_PROCESS_POLYFILL = true;" },
+};
+const ESM_SH_ENTRY = [
+	'import { state } from "lib";',
+	'import { root } from "lib-dom";',
+	"console.log(root(), state);",
+].join("\n");
+
 function mockCdn(extra: typeof cdn = {}) {
 	const fetchImpl = vi.fn<FetchImpl>(async (url) => {
 		const entry = extra[url] ?? cdn[url];
@@ -414,6 +450,52 @@ describe("Rollup build", () => {
 
 		expect(code.match(/LIB_STATE/g)).toHaveLength(1);
 		expect(fetchCounts()[lib]).toBe(1);
+	});
+
+	it("bundles an esm.sh package once without versions, since its stub and dependents import one build path", async () => {
+		const { fetchImpl, fetchCounts } = mockCdn(esmShGraph);
+		await writeFile(entry, ESM_SH_ENTRY);
+
+		const code = await build({
+			input: entry,
+			plugins: [importCdn({ fetchImpl, priority: ["esm.sh"] })],
+		});
+
+		expect(code.match(/LIB_STATE/g)).toHaveLength(1);
+		expect(code).toContain('"SCHED_TICK"');
+		expect(code).toContain("NODE_PROCESS_POLYFILL");
+		expect(code).not.toContain("esm.sh");
+		expect(fetchCounts()[ESM_SH_LIB]).toBe(1);
+	});
+
+	it("refetches esm.sh range and /node/ imports on an offline rebuild with the on-disk cache", async () => {
+		const { fetchImpl } = mockCdn(esmShGraph);
+		await writeFile(entry, ESM_SH_ENTRY);
+		const options = {
+			priority: ["esm.sh" as const],
+			cache: path.join(dir, "cache"),
+			versions: { lib: "1.0.0", "lib-dom": "1.0.0" },
+		};
+		await build({ input: entry, plugins: [importCdn({ ...options, fetchImpl })] });
+
+		const offline = vi.fn<FetchImpl>(async () => {
+			throw new Error("offline");
+		});
+		const warnings: RollupLog[] = [];
+		const bundle = await rollup({
+			input: entry,
+			onwarn: (warning) => {
+				warnings.push(warning);
+			},
+			plugins: [importCdn({ ...options, fetchImpl: offline })],
+		});
+		await bundle.close();
+
+		expect(offline.mock.calls.map(([url]) => url).sort()).toEqual([
+			"https://esm.sh/node/process.mjs",
+			ESM_SH_SCHED_RANGE,
+		]);
+		expect(warnings.filter(({ code }) => code === "PLUGIN_WARNING")).toHaveLength(2);
 	});
 
 	it("keeps two modules served from one URL apart when their bodies differ", async () => {
