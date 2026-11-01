@@ -60,13 +60,13 @@ function pinnedVersion(key: string, versions: PluginOptions["versions"]) {
 }
 
 // Only the path names the package version; a query or fragment can carry any text. Skypack
-// serves the code itself from `/-/<pkg>@v<x.y.z>-<hash>/...`, which is pinned too.
+// serves the code from `/-/<pkg>@v<x.y.z>-<hash>/...` and its pinned URLs from `/pin/` alike.
 function isPinnedUrl(value: string) {
 	if (!URL.canParse(value)) return false;
 	const { pathname } = new URL(value);
 	return (
 		/@\d+\.\d+\.\d+(?:-[\w.-]+)?(?:\+[\w.-]+)?(?=\/|$)/.test(pathname) ||
-		/^\/-\/(?:@[^/]+\/)?[^/@]+@v\d+\.\d+\.\d+-[\w.-]+\//.test(pathname)
+		/^\/(?:-|pin)\/(?:@[^/]+\/)?[^/@]+@v\d+\.\d+\.\d+-[\w.-]+\//.test(pathname)
 	);
 }
 
