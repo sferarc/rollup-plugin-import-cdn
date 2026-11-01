@@ -9,7 +9,7 @@ Let a Rollup or Vite build import ESM packages and URLs from a CDN and bundle th
 ## Phases
 
 - **Close the known gaps (done).** Every item in [[2026-10-20-plugin-gaps]] is done or decided.
-- **First release from this repository (open).** Tracked in [#111](https://github.com/sferarc/rollup-plugin-import-cdn/issues/111): the npm trusted publisher ([#108](https://github.com/sferarc/rollup-plugin-import-cdn/issues/108)), enabling releases ([#109](https://github.com/sferarc/rollup-plugin-import-cdn/issues/109)) and merging the `0.4.0` version pull request ([#110](https://github.com/sferarc/rollup-plugin-import-cdn/issues/110)). See [[decisions/2026-10-08-release-off-until-enabled]] and [[development/release]].
+- **First release from this repository (done).** `0.4.0` published on 2026-11-01. Tracked in [#111](https://github.com/sferarc/rollup-plugin-import-cdn/issues/111): the npm trusted publisher ([#108](https://github.com/sferarc/rollup-plugin-import-cdn/issues/108)), enabling releases ([#109](https://github.com/sferarc/rollup-plugin-import-cdn/issues/109)) and merging the `0.4.0` version pull request ([#110](https://github.com/sferarc/rollup-plugin-import-cdn/issues/110)). See [[decisions/2026-10-08-release-off-until-enabled]] and [[development/release]].
 
 ## Plan notes
 
