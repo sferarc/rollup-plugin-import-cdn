@@ -14,8 +14,8 @@ The first release from this repository is the owner's decision (comment in `rele
 
 - Changesets merged before the variable is set accumulate and ship together in the first version pull request.
 - Sessions and contributors never set `RELEASE_ENABLED`, publish, tag or bump the version by hand.
-- The trusted publisher on npmjs.com has to name this repository and `release.yml` before the first run, or the publish step fails to authenticate. Whether that is done is unknown ([[development/release]]).
+- The trusted publisher on npmjs.com has to name this repository and `release.yml`, or the publish step fails to authenticate. It does: `0.4.0` published through it with provenance ([[development/release]]).
 
 ## What would reopen it
 
-The owner enabling releases, at which point this note records that date.
+The owner enabling releases, at which point this note records that date. The owner enabled them on 2026-11-01 with a `workflow_dispatch` of `release.yml`, and `0.4.0` published the same day ([[development/release]], "First release"). The gate stays in `release.yml`, so unsetting the variable turns publishing off again.
