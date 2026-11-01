@@ -94,6 +94,14 @@ function skypackServedVersion(requested: string, main: string): string | undefin
 	return new RegExp(`${prefix}(\\d+\\.\\d+\\.\\d+[\\w.-]*?)-\\w+/`).exec(main)?.[1];
 }
 
+// jsDelivr serves a `+esm` file it cannot build as HTTP 200: a `/** Failed to bundle ... */` comment, then a throw.
+function jsdelivrBuildError(url: string, main: string): string | undefined {
+	if (!URL.canParse(url)) return;
+	const { hostname, pathname } = new URL(url);
+	if (hostname !== "cdn.jsdelivr.net" || !pathname.endsWith("/+esm")) return;
+	return /^\s*\/\*[\s*]*(Failed to bundle\b[^\n]*)/.exec(main)?.[1]?.trim();
+}
+
 // A captive portal or a soft error page answers 200 with HTML, which no module can start with.
 export const isHtmlPage = (main: string) =>
 	/^\s*<(?:!doctype\s+html|html|head|body)[\s>]/i.test(main);
@@ -227,6 +235,7 @@ export async function resolveDependency(
 				cached &&
 				!isSkypackError(cached.url) &&
 				!skypackServedVersion(cdnUrl, cached.main) &&
+				!jsdelivrBuildError(cached.url, cached.main) &&
 				!isHtmlPage(cached.main) &&
 				(cached.url === cdnUrl ||
 					!hasIntegrity(cdnUrl, integrity) ||
@@ -255,6 +264,12 @@ export async function resolveDependency(
 			if (served) {
 				sawHttpError = true;
 				fail(cdnUrl, `Skypack served version ${served} instead`);
+				continue;
+			}
+			const buildError = jsdelivrBuildError(response.url || cdnUrl, main);
+			if (buildError) {
+				sawHttpError = true;
+				fail(cdnUrl, `jsDelivr could not build the package (${buildError})`);
 				continue;
 			}
 			if (isHtmlPage(main)) {
