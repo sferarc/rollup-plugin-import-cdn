@@ -25,7 +25,7 @@ const createMockCdn = (modules: Record<string, string>): FetchImpl => {
 describe("Integration: Real-world scenarios", () => {
 	it("should handle a package with multiple entry points", async () => {
 		const cdnModules = {
-			"https://cdn.skypack.dev/lodash-es": `
+			"https://esm.sh/lodash-es": `
 export { default as debounce } from "./debounce.js";
 export { default as throttle } from "./throttle.js";
 `.trim(),
@@ -38,13 +38,13 @@ export { default as throttle } from "./throttle.js";
 		const { load } = hooks(plugin);
 		const result = await load("lodash-es");
 
-		expect(result).toContain("https://cdn.skypack.dev/debounce.js");
-		expect(result).toContain("https://cdn.skypack.dev/throttle.js");
+		expect(result).toContain("https://esm.sh/debounce.js");
+		expect(result).toContain("https://esm.sh/throttle.js");
 	});
 
 	it("should handle React-like library with JSX runtime", async () => {
 		const cdnModules = {
-			"https://cdn.skypack.dev/react@18.2.0": `
+			"https://esm.sh/react@18.2.0": `
 import { jsx, jsxs } from "./jsx-runtime.js";
 export { createElement, Component, useState, useEffect } from "./react.production.min.js";
 export { jsx, jsxs };
@@ -59,13 +59,13 @@ export { jsx, jsxs };
 		const { load } = hooks(plugin);
 		const result = await load("react");
 
-		expect(result).toContain("https://cdn.skypack.dev/jsx-runtime.js");
-		expect(result).toContain("https://cdn.skypack.dev/react.production.min.js");
+		expect(result).toContain("https://esm.sh/jsx-runtime.js");
+		expect(result).toContain("https://esm.sh/react.production.min.js");
 	});
 
 	it("should handle scoped packages", async () => {
 		const cdnModules = {
-			"https://cdn.skypack.dev/@tanstack/react-query": `
+			"https://esm.sh/@tanstack/react-query": `
 export { QueryClient } from "./build/lib/queryClient.js";
 export { useQuery } from "./build/lib/useQuery.js";
 `.trim(),
@@ -82,13 +82,13 @@ export { useQuery } from "./build/lib/useQuery.js";
 
 		const result = await load("@tanstack/react-query");
 		// Relative imports are resolved relative to the package URL
-		expect(result).toContain("https://cdn.skypack.dev/@tanstack/build/lib/queryClient.js");
-		expect(result).toContain("https://cdn.skypack.dev/@tanstack/build/lib/useQuery.js");
+		expect(result).toContain("https://esm.sh/@tanstack/build/lib/queryClient.js");
+		expect(result).toContain("https://esm.sh/@tanstack/build/lib/useQuery.js");
 	});
 
 	it("should handle dynamic imports correctly", async () => {
 		const cdnModules = {
-			"https://cdn.skypack.dev/dynamic-loader": `
+			"https://esm.sh/dynamic-loader": `
 export async function loadModule(name) {
   const mod = await import("./modules/" + name + ".js");
   return mod.default;
@@ -109,8 +109,8 @@ export async function loadModule(name) {
 
 	it("should handle CSS-in-JS library patterns", async () => {
 		const cdnModules = {
-			"https://cdn.skypack.dev/styled-components": `
-import { createElement } from "https://cdn.skypack.dev/react";
+			"https://esm.sh/styled-components": `
+import { createElement } from "https://esm.sh/react";
 import { StyleSheet } from "./sheet.js";
 export const styled = (tag) => (styles) => {
   return createElement(tag, { className: StyleSheet.create(styles) });
@@ -126,9 +126,9 @@ export const styled = (tag) => (styles) => {
 		const result = await load("styled-components");
 
 		// Absolute URL imports should be preserved
-		expect(result).toContain("https://cdn.skypack.dev/react");
+		expect(result).toContain("https://esm.sh/react");
 		// Relative imports should be resolved
-		expect(result).toContain("https://cdn.skypack.dev/sheet.js");
+		expect(result).toContain("https://esm.sh/sheet.js");
 	});
 
 	it("should support fallback CDN chain", async () => {
@@ -153,7 +153,7 @@ export const styled = (tag) => (styles) => {
 
 	it("should handle version-specific imports", async () => {
 		const cdnModules = {
-			"https://cdn.skypack.dev/lodash@4.17.21": `
+			"https://esm.sh/lodash@4.17.21": `
 // Lodash v4.17.21
 export const VERSION = "4.17.21";
 export { default as get } from "./get.js";
@@ -171,7 +171,7 @@ export { default as get } from "./get.js";
 		const result = await load("lodash");
 
 		expect(result).toContain('VERSION = "4.17.21"');
-		expect(result).toContain("https://cdn.skypack.dev/get.js");
+		expect(result).toContain("https://esm.sh/get.js");
 	});
 
 	it("should handle URL imports directly", async () => {
@@ -216,7 +216,7 @@ export { default as get } from "./get.js";
 
 	it("should handle re-exports correctly", async () => {
 		const cdnModules = {
-			"https://cdn.skypack.dev/my-lib": `
+			"https://esm.sh/my-lib": `
 export * from "./core.js";
 export * from "./utils.js";
 export { default } from "./main.js";
@@ -230,9 +230,9 @@ export { default } from "./main.js";
 		const { load } = hooks(plugin);
 		const result = await load("my-lib");
 
-		expect(result).toContain("https://cdn.skypack.dev/core.js");
-		expect(result).toContain("https://cdn.skypack.dev/utils.js");
-		expect(result).toContain("https://cdn.skypack.dev/main.js");
+		expect(result).toContain("https://esm.sh/core.js");
+		expect(result).toContain("https://esm.sh/utils.js");
+		expect(result).toContain("https://esm.sh/main.js");
 	});
 });
 
@@ -249,14 +249,14 @@ describe("Integration: Error handling", () => {
 
 		expect(result).toBeUndefined();
 		expect(logs.debug).toEqual([
-			"Failed to fetch failing-package from https://cdn.skypack.dev/failing-package: Network error",
+			"Failed to fetch failing-package from https://esm.sh/failing-package: Network error",
 		]);
 		expect(logs.warn[0]).toMatch(/^Could not resolve dependency failing-package\n/);
 	});
 
 	it("should handle malformed module content", async () => {
 		const cdnModules = {
-			"https://cdn.skypack.dev/malformed": "this is not valid ES module syntax {{{",
+			"https://esm.sh/malformed": "this is not valid ES module syntax {{{",
 		};
 
 		const plugin = importCdn({
@@ -271,7 +271,7 @@ describe("Integration: Error handling", () => {
 
 	it("should handle module with no imports", async () => {
 		const cdnModules = {
-			"https://cdn.skypack.dev/simple": "export const value = 42;",
+			"https://esm.sh/simple": "export const value = 42;",
 		};
 
 		const plugin = importCdn({

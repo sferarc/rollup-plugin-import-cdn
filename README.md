@@ -30,7 +30,7 @@ export default {
 Now you can import packages directly from URLs:
 
 ```js
-// Resolved via Skypack by default
+// Resolved via esm.sh by default
 import { debounce } from "lodash-es";
 
 // Direct URL import
@@ -44,7 +44,7 @@ import confetti from "https://esm.sh/canvas-confetti";
 | `cache` | none | Directory for an on-disk cache of responses from pinned URLs. See [Fetch Cache](#fetch-cache). |
 | `fetchImpl` | global `fetch` | Function used for every request: `(url, { signal }) => Promise<{ ok, status, url, text() }>`; `signal` is passed only while `timeout` is enabled. `importCdn` throws `No fetch implementation found` when it is not set and no global `fetch` exists, and throws when it is set to anything other than a function. |
 | `integrity` | none | SRI hashes that fetched code must match, keyed by URL. See [Integrity](#integrity). |
-| `priority` | `["skypack"]` | CDNs to try, in order. Each entry is `"skypack"`, `"esm.sh"`, `"jsdelivr"` or a function returning a URL; any other entry throws when the plugin is created. See [Custom CDN](#custom-cdn). |
+| `priority` | `["esm.sh"]` | CDNs to try, in order. Each entry is `"esm.sh"`, `"skypack"`, `"jsdelivr"` or a function returning a URL; any other entry throws when the plugin is created. Before 0.5.0 the default was `["skypack"]`; set `priority: ["skypack"]` to keep it. See [Custom CDN](#custom-cdn). |
 | `timeout` | `30000` | Milliseconds each request may take, reading the body included, before it counts as a network error and the next CDN is tried. A failed or timed-out URL is not retried until the next build. `0` disables it; the largest accepted value is `2147483647`, the longest delay Node's `setTimeout` holds. The plugin aborts the `signal` it passes to `fetchImpl` and stops waiting even if `fetchImpl` ignores it. |
 | `versions` | none | Versions to pin, keyed by package name or full specifier. Each value must be a non-empty string; anything else, or a `versions` that is not an object, throws when the plugin is created. See [Version Pinning](#version-pinning). |
 
@@ -59,7 +59,7 @@ importCdn({
 });
 ```
 
-A version set for a package also applies to its subpaths, and goes after the package name: with `versions: { "react-dom": "18.2.0" }`, `import "react-dom/client"` fetches `https://cdn.skypack.dev/react-dom@18.2.0/client`. Scoped packages work the same way, so `@scope/pkg/sub` with `"@scope/pkg": "1.0.0"` fetches `https://cdn.skypack.dev/@scope/pkg@1.0.0/sub`. An entry for the full specifier, such as `"react-dom/client"`, takes precedence over the package entry. A specifier that carries its own version, such as `react@17/jsx-runtime`, ignores `versions`. A query or fragment on the specifier is kept after the version: with `versions: { preact: "10.19.3" }` and `priority: ["esm.sh"]`, `import "preact?dev"` fetches `https://esm.sh/preact@10.19.3?dev`, and `"jsdelivr"` puts it after `/+esm`.
+A version set for a package also applies to its subpaths, and goes after the package name: with `versions: { "react-dom": "18.2.0" }`, `import "react-dom/client"` fetches `https://esm.sh/react-dom@18.2.0/client`. Scoped packages work the same way, so `@scope/pkg/sub` with `"@scope/pkg": "1.0.0"` fetches `https://esm.sh/@scope/pkg@1.0.0/sub`. An entry for the full specifier, such as `"react-dom/client"`, takes precedence over the package entry. A specifier that carries its own version, such as `react@17/jsx-runtime`, ignores `versions`. A query or fragment on the specifier is kept after the version: with `versions: { preact: "10.19.3" }`, `import "preact?dev"` fetches `https://esm.sh/preact@10.19.3?dev`, and `"jsdelivr"` puts it after `/+esm`.
 
 The built-in `"skypack"`, `"esm.sh"` and `"jsdelivr"` entries apply the pin to their URLs. A custom `priority` function receives the version as its second argument and decides how to use it.
 
@@ -84,19 +84,19 @@ A URL counts as pinned when its path contains `@` and a full `major.minor.patch`
 importCdn({
   versions: { lodash: "4.17.21" },
   integrity: {
-    "https://cdn.skypack.dev/lodash@4.17.21": "sha384-<base64 digest>",
+    "https://esm.sh/lodash@4.17.21": "sha384-<base64 digest>",
   },
 });
 ```
 
-Each entry maps a URL to a [Subresource Integrity](https://developer.mozilla.org/en-US/docs/Web/Security/Subresource_Integrity) value: `sha256-`, `sha384-` or `sha512-` followed by the base64 digest of the module source. The key can be the URL the plugin requests or the URL the CDN redirects to. When the fetched source does not match, the build fails with the URL and the expected and actual digests; the plugin does not fall back to the next CDN. Several space-separated hashes are accepted, and as in browsers only those using the strongest listed algorithm count, any one of them matching. URLs without an entry are not checked. At the end of a build, each entry that no URL fetched in that build matched is reported as a Rollup warning naming its URL, so a key left at the old version after a bump in `versions` does not go unnoticed; with one `integrity` map shared by several builds, a build that does not import every listed URL warns for the rest. An invalid value throws when the plugin is created, and so does a key that is not an absolute URL, such as `lodash` or `//cdn.skypack.dev/lodash@4.17.21`, since it could never match a fetched URL.
+Each entry maps a URL to a [Subresource Integrity](https://developer.mozilla.org/en-US/docs/Web/Security/Subresource_Integrity) value: `sha256-`, `sha384-` or `sha512-` followed by the base64 digest of the module source. The key can be the URL the plugin requests or the URL the CDN redirects to. When the fetched source does not match, the build fails with the URL and the expected and actual digests; the plugin does not fall back to the next CDN. Several space-separated hashes are accepted, and as in browsers only those using the strongest listed algorithm count, any one of them matching. URLs without an entry are not checked. At the end of a build, each entry that no URL fetched in that build matched is reported as a Rollup warning naming its URL, so a key left at the old version after a bump in `versions` does not go unnoticed; with one `integrity` map shared by several builds, a build that does not import every listed URL warns for the rest. An invalid value throws when the plugin is created, and so does a key that is not an absolute URL, such as `lodash` or `//esm.sh/lodash@4.17.21`, since it could never match a fetched URL.
 
 jsDelivr builds its `+esm` files on demand and advises against SRI for them, so a `"jsdelivr"` URL with an entry can fail the build after a rebuild on their side.
 
 Compute a hash from the exact URL the plugin fetches:
 
 ```sh
-curl -sL https://cdn.skypack.dev/lodash@4.17.21 | openssl dgst -sha384 -binary | openssl base64 -A
+curl -sL https://esm.sh/lodash@4.17.21 | openssl dgst -sha384 -binary | openssl base64 -A
 ```
 
 The hash covers the module text as `fetchImpl`'s `text()` returns it, encoded as UTF-8. For a UTF-8 module without a byte order mark that is the file as served, so the command above gives the right value.
@@ -131,7 +131,7 @@ importCdn({
 - **Failures.** A Skypack response redirected to `https://cdn.skypack.dev/error/build:...`, Skypack's answer for a package it cannot build, counts as a non-OK status even though it is HTTP 200, and so does a Skypack response for an exact version such as `react@18.2.0` whose code imports a different version of that package. The same goes for a jsDelivr `+esm` file that jsDelivr could not bundle, which it serves with HTTP 200 as a module that throws `Failed to bundle using ...`; the build error names jsDelivr's reason. So does any HTTP 200 response whose body is an HTML page (it starts with `<!doctype html>`, `<html>`, `<head>` or `<body>`), such as a captive portal or a CDN's error page, and such a page is never written to the [fetch cache](#fetch-cache). If no CDN succeeds and at least one answered with a non-OK status, the build fails with one line per attempted URL and its status or error, for example `Failed to fetch lodash-es from https://cdn.skypack.dev/lodash-es: HTTP 404`. If every attempt failed with a network error, the plugin emits a Rollup warning with the same lines and leaves the import for Rollup to handle. Each failed attempt is also logged at debug level, visible with `logLevel: "debug"`.
 - **Transitive imports.** Relative, root-relative and protocol-relative static imports inside a CDN module are rewritten to absolute URLs, resolved against the URL the module was served from. Bare imports are left as written and go back through the plugin, so `versions` and `priority` apply to transitive dependencies too.
 - **Dynamic imports.** A relative `import("./chunk.js")` inside a CDN module is resolved against the URL the module was served from, after redirects.
-- **Sourcemaps.** With `output.sourcemap` set, a CDN module is listed in the map's `sources` under the URL it was served from, such as `https://cdn.skypack.dev/-/pkg@1.0.0/dist/index.js`, rather than a path under the working directory. Its source content is the module as bundled, with its imports rewritten. An `output.sourcemapPathTransform` of your own still runs for local sources and is not called for CDN ones. CDN modules are also put on the map's ignore list (`x_google_ignoreList`), as Rollup does for `node_modules`, so browser devtools skip them when stepping through code; this needs Rollup 3.16 or newer. Setting `output.sourcemapIgnoreList` yourself, to a function or `false`, replaces this for every source.
+- **Sourcemaps.** With `output.sourcemap` set, a CDN module is listed in the map's `sources` under the URL it was served from, such as `https://esm.sh/react@18.2.0/es2022/react.mjs`, rather than a path under the working directory. Its source content is the module as bundled, with its imports rewritten. An `output.sourcemapPathTransform` of your own still runs for local sources and is not called for CDN ones. CDN modules are also put on the map's ignore list (`x_google_ignoreList`), as Rollup does for `node_modules`, so browser devtools skip them when stepping through code; this needs Rollup 3.16 or newer. Setting `output.sourcemapIgnoreList` yourself, to a function or `false`, replaces this for every source.
 
 ## Vite
 

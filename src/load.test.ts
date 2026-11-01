@@ -104,11 +104,11 @@ describe("resolveDependency", () => {
 		expect(fetchImpl).not.toHaveBeenCalled();
 	});
 
-	it("should resolve package from skypack by default", async () => {
+	it("should resolve package from esm.sh by default", async () => {
 		const mockContent = 'export const foo = "bar";';
 		const options: PluginOptions = {
 			fetchImpl: createMockFetch({
-				"https://cdn.skypack.dev/lodash": mockContent,
+				"https://esm.sh/lodash": mockContent,
 			}),
 		};
 
@@ -116,7 +116,7 @@ describe("resolveDependency", () => {
 
 		expect(result).toEqual({
 			name: "lodash",
-			url: "https://cdn.skypack.dev/lodash",
+			url: "https://esm.sh/lodash",
 			main: mockContent,
 		});
 	});
@@ -125,7 +125,7 @@ describe("resolveDependency", () => {
 		const mockContent = 'export const version = "4.17.21";';
 		const options: PluginOptions = {
 			fetchImpl: createMockFetch({
-				"https://cdn.skypack.dev/lodash@4.17.21": mockContent,
+				"https://esm.sh/lodash@4.17.21": mockContent,
 			}),
 			versions: {
 				lodash: "4.17.21",
@@ -136,7 +136,7 @@ describe("resolveDependency", () => {
 
 		expect(result).toEqual({
 			name: "lodash",
-			url: "https://cdn.skypack.dev/lodash@4.17.21",
+			url: "https://esm.sh/lodash@4.17.21",
 			main: mockContent,
 		});
 	});
@@ -167,6 +167,7 @@ describe("resolveDependency", () => {
 	])("should place the version for %s after the package name (%j)", async (key, versions, path) => {
 		const options: PluginOptions = {
 			fetchImpl: createMockFetch({ [`https://cdn.skypack.dev/${path}`]: "export {};" }),
+			priority: ["skypack"],
 			versions,
 		};
 
@@ -332,7 +333,7 @@ describe("resolveDependency", () => {
 		};
 
 		await expect(resolveDependency("missing", options)).rejects.toThrow(
-			"Failed to fetch missing from https://cdn.skypack.dev/missing: HTTP 404",
+			"Failed to fetch missing from https://esm.sh/missing: HTTP 404",
 		);
 	});
 
@@ -371,7 +372,9 @@ describe("resolveDependency", () => {
 		});
 
 		it("should fail naming the error URL when no other CDN is configured", async () => {
-			await expect(resolveDependency("vue", { fetchImpl: skypackFetch() })).rejects.toThrow(
+			await expect(
+				resolveDependency("vue", { fetchImpl: skypackFetch(), priority: ["skypack"] }),
+			).rejects.toThrow(
 				`Failed to fetch vue from https://cdn.skypack.dev/vue: Skypack could not build the package (${errorUrl})`,
 			);
 		});
@@ -541,7 +544,9 @@ describe("resolveDependency", () => {
 		});
 
 		it("should fail naming the page URL when no other CDN is configured", async () => {
-			await expect(resolveDependency("vue", { fetchImpl: portalFetch() })).rejects.toThrow(
+			await expect(
+				resolveDependency("vue", { fetchImpl: portalFetch(), priority: ["skypack"] }),
+			).rejects.toThrow(
 				`Failed to fetch vue from https://cdn.skypack.dev/vue: served an HTML page instead of a JavaScript module (${portal})`,
 			);
 		});
@@ -627,6 +632,7 @@ describe("resolveDependency", () => {
 			await expect(
 				resolveDependency("react-dom/client", {
 					fetchImpl: skypackServes(served("react-dom", "17.0.1", "/dist=es2019,mode=raw/client")),
+					priority: ["skypack"],
 					versions: { "react-dom": "18.2.0" },
 				}),
 			).rejects.toThrow(
@@ -719,7 +725,7 @@ describe("resolveDependency", () => {
 		expect(result).toBeNull();
 		expect(logger.warn).toHaveBeenCalledWith(
 			"Could not resolve dependency nonexistent\n" +
-				"[rollup-plugin-import-cdn] Failed to fetch nonexistent from https://cdn.skypack.dev/nonexistent: Not found: https://cdn.skypack.dev/nonexistent",
+				"[rollup-plugin-import-cdn] Failed to fetch nonexistent from https://esm.sh/nonexistent: Not found: https://esm.sh/nonexistent",
 		);
 	});
 
@@ -783,7 +789,7 @@ describe("loadHook", () => {
 		const mockContent = 'export const foo = "bar";';
 		const options: PluginOptions = {
 			fetchImpl: createMockFetch({
-				"https://cdn.skypack.dev/simple": mockContent,
+				"https://esm.sh/simple": mockContent,
 			}),
 		};
 
@@ -795,13 +801,13 @@ describe("loadHook", () => {
 		const mockContent = 'import { helper } from "./utils.js";\nexport const main = helper();';
 		const options: PluginOptions = {
 			fetchImpl: createMockFetch({
-				"https://cdn.skypack.dev/package": mockContent,
+				"https://esm.sh/package": mockContent,
 			}),
 		};
 
 		const result = await loadHook("package", options);
 
-		expect(result).toContain("https://cdn.skypack.dev/utils.js");
+		expect(result).toContain("https://esm.sh/utils.js");
 		expect(result).not.toContain("./utils.js");
 	});
 
@@ -811,14 +817,14 @@ import { b } from "./b.js";
 export const combined = a + b;`;
 		const options: PluginOptions = {
 			fetchImpl: createMockFetch({
-				"https://cdn.skypack.dev/multi": mockContent,
+				"https://esm.sh/multi": mockContent,
 			}),
 		};
 
 		const result = await loadHook("multi", options);
 
-		expect(result).toContain("https://cdn.skypack.dev/a.js");
-		expect(result).toContain("https://cdn.skypack.dev/b.js");
+		expect(result).toContain("https://esm.sh/a.js");
+		expect(result).toContain("https://esm.sh/b.js");
 	});
 
 	it("should preserve absolute URL imports", async () => {
@@ -826,7 +832,7 @@ export const combined = a + b;`;
 		const mockContent = `import { other } from "${absoluteUrl}";\nexport { other };`;
 		const options: PluginOptions = {
 			fetchImpl: createMockFetch({
-				"https://cdn.skypack.dev/package": mockContent,
+				"https://esm.sh/package": mockContent,
 			}),
 		};
 
@@ -839,13 +845,13 @@ export const combined = a + b;`;
 		const mockContent = 'import { nested } from "../parent/module.js";\nexport { nested };';
 		const options: PluginOptions = {
 			fetchImpl: createMockFetch({
-				"https://cdn.skypack.dev/deep/nested/package": mockContent,
+				"https://esm.sh/deep/nested/package": mockContent,
 			}),
 		};
 
-		const result = await loadHook("https://cdn.skypack.dev/deep/nested/package", options);
+		const result = await loadHook("https://esm.sh/deep/nested/package", options);
 
-		expect(result).toContain("https://cdn.skypack.dev/deep/parent/module.js");
+		expect(result).toContain("https://esm.sh/deep/parent/module.js");
 	});
 
 	it("should leave import.meta untouched while rewriting imports", async () => {
@@ -853,14 +859,14 @@ export const combined = a + b;`;
 			'import { a } from "./a.js";\nexport const here = new URL("./b.js", import.meta.url).href;';
 		const options: PluginOptions = {
 			fetchImpl: createMockFetch({
-				"https://cdn.skypack.dev/meta": mockContent,
+				"https://esm.sh/meta": mockContent,
 			}),
 		};
 
 		const result = await loadHook("meta", options);
 
 		expect(result).toBe(
-			'import { a } from "https://cdn.skypack.dev/a.js";\nexport const here = new URL("./b.js", import.meta.url).href;',
+			'import { a } from "https://esm.sh/a.js";\nexport const here = new URL("./b.js", import.meta.url).href;',
 		);
 	});
 
@@ -896,13 +902,13 @@ export const combined = a + b;`;
 			'export const b = import("./b.js");\nexport const c = import( "./c.js" );\nexport const d = import("./d.js", { with: { type: "json" } });';
 		const options: PluginOptions = {
 			fetchImpl: createMockFetch({
-				"https://cdn.skypack.dev/dynamic": `import { a } from "./a.js";\n${dynamicImports}`,
+				"https://esm.sh/dynamic": `import { a } from "./a.js";\n${dynamicImports}`,
 			}),
 		};
 
 		const result = await loadHook("dynamic", options);
 
-		expect(result).toBe(`import { a } from "https://cdn.skypack.dev/a.js";\n${dynamicImports}`);
+		expect(result).toBe(`import { a } from "https://esm.sh/a.js";\n${dynamicImports}`);
 	});
 
 	it("should leave bare specifiers for resolveId", async () => {
@@ -910,14 +916,14 @@ export const combined = a + b;`;
 			'import React from "react";\nimport { a } from "./a.js";\nexport { React, a };';
 		const options: PluginOptions = {
 			fetchImpl: createMockFetch({
-				"https://cdn.skypack.dev/bare": mockContent,
+				"https://esm.sh/bare": mockContent,
 			}),
 		};
 
 		const result = await loadHook("bare", options);
 
 		expect(result).toBe(
-			'import React from "react";\nimport { a } from "https://cdn.skypack.dev/a.js";\nexport { React, a };',
+			'import React from "react";\nimport { a } from "https://esm.sh/a.js";\nexport { React, a };',
 		);
 	});
 
@@ -926,14 +932,14 @@ export const combined = a + b;`;
 			'import "./\\u00fc.js";\nimport \'./it\\\'s.js\';\nimport "./caf\\xe9.js";\nimport "./x.js?a\\\\b";\nimport "./y.js#\\\\u";';
 		const options: PluginOptions = {
 			fetchImpl: createMockFetch({
-				"https://cdn.skypack.dev/escaped": mockContent,
+				"https://esm.sh/escaped": mockContent,
 			}),
 		};
 
 		const result = await loadHook("escaped", options);
 
 		expect(result).toBe(
-			'import "https://cdn.skypack.dev/%C3%BC.js";\nimport \'https://cdn.skypack.dev/it\\\'s.js\';\nimport "https://cdn.skypack.dev/caf%C3%A9.js";\nimport "https://cdn.skypack.dev/x.js?a\\\\b";\nimport "https://cdn.skypack.dev/y.js#\\\\u";',
+			'import "https://esm.sh/%C3%BC.js";\nimport \'https://esm.sh/it\\\'s.js\';\nimport "https://esm.sh/caf%C3%A9.js";\nimport "https://esm.sh/x.js?a\\\\b";\nimport "https://esm.sh/y.js#\\\\u";',
 		);
 	});
 
@@ -943,7 +949,7 @@ export const combined = a + b;`;
 			fetchImpl: async (url) => ({
 				ok: true,
 				url: "https://cdn.example/-/pkg@1.0.0/dist/index.js",
-				text: async () => (url === "https://cdn.skypack.dev/paths" ? mockContent : ""),
+				text: async () => (url === "https://esm.sh/paths" ? mockContent : ""),
 			}),
 		};
 
@@ -975,7 +981,7 @@ export const combined = a + b;`;
 			fetchImpl: async (url) => ({
 				ok: true,
 				url: "http://mirror.test/-/pkg@1.0.0/index.js",
-				text: async () => (url === "https://cdn.skypack.dev/protocol" ? mockContent : ""),
+				text: async () => (url === "https://esm.sh/protocol" ? mockContent : ""),
 			}),
 		};
 
@@ -991,14 +997,14 @@ export const combined = a + b;`;
 			'const s = "héllo 🎉 日本";\nimport { a } from "./a.js";\nconst t = "ünï 🚀";\nimport { b } from "./b.js";\nexport const u = "ß 🌍";';
 		const options: PluginOptions = {
 			fetchImpl: createMockFetch({
-				"https://cdn.skypack.dev/unicode": mockContent,
+				"https://esm.sh/unicode": mockContent,
 			}),
 		};
 
 		const result = await loadHook("unicode", options);
 
 		expect(result).toBe(
-			'const s = "héllo 🎉 日本";\nimport { a } from "https://cdn.skypack.dev/a.js";\nconst t = "ünï 🚀";\nimport { b } from "https://cdn.skypack.dev/b.js";\nexport const u = "ß 🌍";',
+			'const s = "héllo 🎉 日本";\nimport { a } from "https://esm.sh/a.js";\nconst t = "ünï 🚀";\nimport { b } from "https://esm.sh/b.js";\nexport const u = "ß 🌍";',
 		);
 	});
 
@@ -1007,7 +1013,7 @@ export const combined = a + b;`;
 		const padding = `/* ${"x".repeat(2 * 1024 * 1024)} */`;
 		const options: PluginOptions = {
 			fetchImpl: createMockFetch({
-				"https://cdn.skypack.dev/large": `${imports}\n${padding}`,
+				"https://esm.sh/large": `${imports}\n${padding}`,
 			}),
 		};
 
@@ -1015,7 +1021,7 @@ export const combined = a + b;`;
 		const result = await loadHook("large", options);
 		const elapsed = performance.now() - start;
 
-		expect(result).toContain('import "https://cdn.skypack.dev/m1999.js";');
+		expect(result).toContain('import "https://esm.sh/m1999.js";');
 		expect(result).not.toContain('"./m');
 		expect(elapsed).toBeLessThan(500);
 	});
@@ -1039,14 +1045,14 @@ export const combined = a + b;`;
 	it("should name the module and URL when the source has a syntax error", async () => {
 		const options: PluginOptions = {
 			fetchImpl: createMockFetch({
-				"https://cdn.skypack.dev/broken": "import { from 'x'",
+				"https://esm.sh/broken": "import { from 'x'",
 			}),
 		};
 
 		const error = await loadHook("broken", options).catch((e: unknown) => e);
 
 		expect((error as Error).message).toMatch(
-			/^\[rollup-plugin-import-cdn\] Could not parse broken from https:\/\/cdn\.skypack\.dev\/broken: Parse error/,
+			/^\[rollup-plugin-import-cdn\] Could not parse broken from https:\/\/esm\.sh\/broken: Parse error/,
 		);
 		expect((error as Error).message).not.toContain("HTML");
 	});
@@ -1081,9 +1087,9 @@ describe("resolveDependency cache", () => {
 		const first = await resolveDependency("lodash", options);
 		const second = await resolveDependency("lodash", options);
 
-		expect(calls).toEqual(["https://cdn.skypack.dev/lodash@4.17.21"]);
+		expect(calls).toEqual(["https://esm.sh/lodash@4.17.21"]);
 		expect(second).toEqual(first);
-		expect(second?.url).toBe("https://cdn.skypack.dev/lodash@4.17.21/resolved.js");
+		expect(second?.url).toBe("https://esm.sh/lodash@4.17.21/resolved.js");
 	});
 
 	it("should cache a subpath pinned through its package name", async () => {
@@ -1097,7 +1103,7 @@ describe("resolveDependency cache", () => {
 		await resolveDependency("react-dom/client", options);
 		await resolveDependency("react-dom/client", options);
 
-		expect(calls).toEqual(["https://cdn.skypack.dev/react-dom@18.2.0/client"]);
+		expect(calls).toEqual(["https://esm.sh/react-dom@18.2.0/client"]);
 	});
 
 	it("should share the cache between plugin instances", async () => {

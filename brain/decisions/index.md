@@ -2,6 +2,7 @@
 
 Dated records of choices a later change could undo by accident. Each says what was decided, why, and what would reopen it. Newest first.
 
+- [[2026-11-01-default-priority-esm-sh]]: the default `priority` is `["esm.sh"]` from 0.5.0, since Skypack serves stale versions for unpinned imports
 - [[2026-10-21-node-only]]: running outside Node is not planned until someone asks
 - [[2026-10-16-integrity-mismatch-fails-build]]: a body that fails its `integrity` entry throws instead of falling back to the next CDN
 - [[2026-10-08-release-off-until-enabled]]: `release.yml` does nothing until `RELEASE_ENABLED` is `true` (set on 2026-11-01), and publishes through trusted publishing only

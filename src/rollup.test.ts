@@ -17,6 +17,10 @@ import { afterEach, beforeEach, describe, expect, it, type MockInstance, vi } fr
 import { importCdn } from "./index";
 import type { FetchImpl } from "./types";
 
+// The fixture CDN has Skypack's URL shapes; a test that names its own `priority` overrides this.
+const skypackCdn = (options: Parameters<typeof importCdn>[0]) =>
+	importCdn({ priority: ["skypack"], ...options });
+
 const PKG_A = "https://cdn.skypack.dev/pkg-a";
 const PKG_A_REDIRECT = "https://cdn.skypack.dev/-/pkg-a@1.0.0/dist/index.js";
 const HELPER = "https://cdn.skypack.dev/-/pkg-a@1.0.0/dist/helper.js";
@@ -182,7 +186,7 @@ describe("Rollup build", () => {
 
 	it("bundles bare, URL, relative, root-relative and local imports into one chunk", async () => {
 		const { fetchImpl } = mockCdn();
-		const code = await build({ input: entry, plugins: [importCdn({ fetchImpl })] });
+		const code = await build({ input: entry, plugins: [skypackCdn({ fetchImpl })] });
 
 		for (const marker of ['"HELPER"', '"SHARED"', '"PKG_B"', '"DIRECT"', '"LOCAL"']) {
 			expect(code).toContain(marker);
@@ -201,7 +205,7 @@ describe("Rollup build", () => {
 			);
 			const input = path.relative(process.cwd(), path.join(local, "index.js"));
 
-			const code = await build({ input, plugins: [importCdn({ fetchImpl })] });
+			const code = await build({ input, plugins: [skypackCdn({ fetchImpl })] });
 
 			expect(code).toContain('"DIRECT"');
 			expect(fetchCounts()).toEqual({ [DIRECT]: 1 });
@@ -219,7 +223,7 @@ describe("Rollup build", () => {
 			load: (id) => (id === "virtual:greeting" ? 'export const greeting = "VIRTUAL";' : undefined),
 		};
 
-		const code = await build({ input: entry, plugins: [importCdn({ fetchImpl }), virtual] });
+		const code = await build({ input: entry, plugins: [skypackCdn({ fetchImpl }), virtual] });
 
 		expect(code).toContain('"VIRTUAL"');
 		expect(fetchCounts()).toEqual({});
@@ -239,7 +243,7 @@ describe("Rollup build", () => {
 
 		const code = await build({
 			input: entry,
-			plugins: [importCdn({ fetchImpl, priority }), local],
+			plugins: [skypackCdn({ fetchImpl, priority }), local],
 		});
 
 		expect(code).toContain('"LOCAL"');
@@ -256,7 +260,7 @@ describe("Rollup build", () => {
 			load: (id) => (id === input ? 'console.log("VIRTUAL_ENTRY");' : undefined),
 		};
 
-		const code = await build({ input, plugins: [importCdn({ fetchImpl }), virtual] });
+		const code = await build({ input, plugins: [skypackCdn({ fetchImpl }), virtual] });
 
 		expect(code).toContain('"VIRTUAL_ENTRY"');
 		expect(fetchCounts()).toEqual({});
@@ -271,7 +275,7 @@ describe("Rollup build", () => {
 			load: (id) => (id === "\0greeting" ? 'export const greeting = "SUBPATH";' : undefined),
 		};
 
-		const code = await build({ input: entry, plugins: [importCdn({ fetchImpl }), imports] });
+		const code = await build({ input: entry, plugins: [skypackCdn({ fetchImpl }), imports] });
 
 		expect(code).toContain('"SUBPATH"');
 		expect(fetchCounts()).toEqual({});
@@ -288,7 +292,7 @@ describe("Rollup build", () => {
 			].join("\n"),
 		);
 
-		const code = await build({ input: entry, plugins: [importCdn({ fetchImpl })] });
+		const code = await build({ input: entry, plugins: [skypackCdn({ fetchImpl })] });
 
 		expect(code).toContain(`new URL("./mod.wasm", "${PKG_WASM_REDIRECT}")`);
 		// The local entry keeps its own import.meta.url.
@@ -298,7 +302,7 @@ describe("Rollup build", () => {
 	it("keeps import.meta.url at the served URL on a rebuild from Rollup's cache", async () => {
 		const { fetchImpl } = mockCdn();
 		await writeFile(entry, 'import { wasm } from "pkg-wasm";\nconsole.log(wasm);');
-		const plugin = importCdn({ fetchImpl });
+		const plugin = skypackCdn({ fetchImpl });
 
 		// Watch mode does this: one plugin instance, and the previous build's cache, so Rollup
 		// reuses the resolved ids of unchanged modules and skips resolveId for them.
@@ -311,7 +315,7 @@ describe("Rollup build", () => {
 
 	it("names each CDN module in the sourcemap by the URL it was served from", async () => {
 		const { fetchImpl } = mockCdn();
-		const bundle = await rollup({ input: entry, plugins: [importCdn({ fetchImpl })] });
+		const bundle = await rollup({ input: entry, plugins: [skypackCdn({ fetchImpl })] });
 		const { output } = await bundle.generate({
 			format: "es",
 			sourcemap: true,
@@ -327,7 +331,7 @@ describe("Rollup build", () => {
 	it("applies a sourcemapPathTransform to local sources only", async () => {
 		const { fetchImpl } = mockCdn();
 		const transform = vi.fn((source: string) => `src://${source}`);
-		const bundle = await rollup({ input: entry, plugins: [importCdn({ fetchImpl })] });
+		const bundle = await rollup({ input: entry, plugins: [skypackCdn({ fetchImpl })] });
 		const { output } = await bundle.generate({
 			format: "es",
 			sourcemap: true,
@@ -349,7 +353,7 @@ describe("Rollup build", () => {
 		const warnings: string[] = [];
 		const bundle = await rollup({
 			input: entry,
-			plugins: [importCdn({ fetchImpl })],
+			plugins: [skypackCdn({ fetchImpl })],
 			onwarn: (warning) => warnings.push(warning.message),
 		});
 		const { output } = await bundle.generate({
@@ -372,7 +376,7 @@ describe("Rollup build", () => {
 		async () => {
 			const { fetchImpl } = mockCdn();
 			const ignoreList = vi.fn((source: string) => source.endsWith("local.js"));
-			const bundle = await rollup({ input: entry, plugins: [importCdn({ fetchImpl })] });
+			const bundle = await rollup({ input: entry, plugins: [skypackCdn({ fetchImpl })] });
 			const { output } = await bundle.generate({
 				format: "es",
 				sourcemap: true,
@@ -388,7 +392,7 @@ describe("Rollup build", () => {
 
 	it("tree-shakes an unused export of a CDN module", async () => {
 		const { fetchImpl } = mockCdn();
-		const code = await build({ input: entry, plugins: [importCdn({ fetchImpl })] });
+		const code = await build({ input: entry, plugins: [skypackCdn({ fetchImpl })] });
 
 		expect(code).toContain("const used =");
 		expect(code).not.toContain("UNUSED_EXPORT");
@@ -396,7 +400,7 @@ describe("Rollup build", () => {
 
 	it("fetches each URL once per build, even when imported twice", async () => {
 		const { fetchImpl, fetchCounts } = mockCdn();
-		await build({ input: entry, plugins: [importCdn({ fetchImpl })] });
+		await build({ input: entry, plugins: [skypackCdn({ fetchImpl })] });
 
 		expect(fetchCounts()).toEqual({
 			[PKG_A]: 1,
@@ -417,7 +421,7 @@ describe("Rollup build", () => {
 			].join("\n"),
 		);
 		const { fetchImpl } = mockCdn();
-		const code = await build({ input: entry, plugins: [importCdn({ fetchImpl })] });
+		const code = await build({ input: entry, plugins: [skypackCdn({ fetchImpl })] });
 
 		expect(code.match(/const used\S* =/g)).toHaveLength(1);
 		expect(code).toContain("console.log(used === used);");
@@ -440,7 +444,7 @@ describe("Rollup build", () => {
 				"console.log(root() === state);",
 			].join("\n"),
 		);
-		const plugin = importCdn({
+		const plugin = skypackCdn({
 			fetchImpl,
 			priority: ["jsdelivr"],
 			versions: { lib: "1.0.0", "lib-dom": "1.0.0" },
@@ -458,7 +462,7 @@ describe("Rollup build", () => {
 
 		const code = await build({
 			input: entry,
-			plugins: [importCdn({ fetchImpl, priority: ["esm.sh"] })],
+			plugins: [skypackCdn({ fetchImpl, priority: ["esm.sh"] })],
 		});
 
 		expect(code.match(/LIB_STATE/g)).toHaveLength(1);
@@ -476,7 +480,7 @@ describe("Rollup build", () => {
 			cache: path.join(dir, "cache"),
 			versions: { lib: "1.0.0", "lib-dom": "1.0.0" },
 		};
-		await build({ input: entry, plugins: [importCdn({ ...options, fetchImpl })] });
+		await build({ input: entry, plugins: [skypackCdn({ ...options, fetchImpl })] });
 
 		const offline = vi.fn<FetchImpl>(async () => {
 			throw new Error("offline");
@@ -487,7 +491,7 @@ describe("Rollup build", () => {
 			onwarn: (warning) => {
 				warnings.push(warning);
 			},
-			plugins: [importCdn({ ...options, fetchImpl: offline })],
+			plugins: [skypackCdn({ ...options, fetchImpl: offline })],
 		});
 		await bundle.close();
 
@@ -515,7 +519,7 @@ describe("Rollup build", () => {
 			text: async () =>
 				url === PKG_A_REDIRECT ? 'export const used = () => "SECOND_BODY";' : cdn[url]!.body,
 		}));
-		const code = await build({ input: entry, plugins: [importCdn({ fetchImpl })] });
+		const code = await build({ input: entry, plugins: [skypackCdn({ fetchImpl })] });
 
 		expect(code).toContain('"SECOND_BODY"');
 		expect(code).toContain('"HELPER"');
@@ -523,7 +527,7 @@ describe("Rollup build", () => {
 
 	it("refetches every URL when the same plugin instance builds again", async () => {
 		const { fetchImpl, fetchCounts } = mockCdn();
-		const plugin = importCdn({ fetchImpl });
+		const plugin = skypackCdn({ fetchImpl });
 
 		const first = await build({ input: entry, plugins: [plugin] });
 		const second = await build({ input: entry, plugins: [plugin] });
@@ -551,7 +555,7 @@ describe("Rollup build", () => {
 
 		const first = await build({
 			input: pinnedEntry,
-			plugins: [importCdn({ fetchImpl: pinnedFetch, cache: cacheDir, versions })],
+			plugins: [skypackCdn({ fetchImpl: pinnedFetch, cache: cacheDir, versions })],
 		});
 		expect(Object.keys(fetchCounts()).sort()).toEqual([
 			"https://cdn.skypack.dev/-/pkg-a@1.0.0/dist/helper.js",
@@ -565,7 +569,7 @@ describe("Rollup build", () => {
 		});
 		const second = await build({
 			input: pinnedEntry,
-			plugins: [importCdn({ fetchImpl: offline, cache: cacheDir, versions })],
+			plugins: [skypackCdn({ fetchImpl: offline, cache: cacheDir, versions })],
 		});
 
 		expect(offline).not.toHaveBeenCalled();
@@ -583,7 +587,7 @@ describe("Rollup build", () => {
 		const bundle = await rollup({
 			input: [entry, second],
 			onwarn: (warning) => expect.fail(warning.message),
-			plugins: [importCdn({ fetchImpl })],
+			plugins: [skypackCdn({ fetchImpl })],
 		});
 		try {
 			await bundle.write({ dir: outDir, format: "es" });
@@ -613,7 +617,7 @@ describe("Rollup build", () => {
 		const watcher = startWatch({
 			input: entry,
 			output: { file, format: "es" },
-			plugins: [importCdn({ fetchImpl })],
+			plugins: [skypackCdn({ fetchImpl })],
 		});
 
 		try {
@@ -670,7 +674,7 @@ describe("Rollup build", () => {
 			input: entry,
 			output: { file, format: "es" },
 			plugins: [
-				importCdn({
+				skypackCdn({
 					fetchImpl,
 					cache: path.join(dir, "cache"),
 					versions: { "pkg-a": "1.0.0", "pkg-b": "1.0.0" },
@@ -713,7 +717,7 @@ describe("Rollup build", () => {
 				logs.push({ level, log });
 			},
 			plugins: [
-				importCdn({
+				skypackCdn({
 					fetchImpl: async () => {
 						throw new Error("ECONNREFUSED");
 					},
@@ -746,7 +750,7 @@ describe("Rollup build", () => {
 		await expect(
 			rollup({
 				input: entry,
-				plugins: [importCdn({ fetchImpl, priority: [(key) => `${key}.js`] })],
+				plugins: [skypackCdn({ fetchImpl, priority: [(key) => `${key}.js`] })],
 			}),
 		).rejects.toThrow(
 			'priority[0] returned "lib.js" for lib; expected an absolute URL or undefined',
@@ -761,7 +765,7 @@ describe("Rollup build", () => {
 		const error = await rollup({
 			input: entry,
 			plugins: [
-				importCdn({ fetchImpl, priority: ["skypack", (key) => `https://mirror.test/${key}`] }),
+				skypackCdn({ fetchImpl, priority: ["skypack", (key) => `https://mirror.test/${key}`] }),
 			],
 		}).catch((cause: unknown) => cause);
 
@@ -780,7 +784,7 @@ describe("Rollup build", () => {
 		const bundle = await rollup({
 			input: [entry, second],
 			onwarn: (warning) => expect.fail(warning.message),
-			plugins: [importCdn({ fetchImpl })],
+			plugins: [skypackCdn({ fetchImpl })],
 		});
 		const { output } = await bundle.generate({ format: "es" });
 		await bundle.close();
@@ -799,7 +803,7 @@ describe("Rollup build", () => {
 		const bundle = await rollup({
 			input: entry,
 			onwarn: (warning) => expect.fail(warning.message),
-			plugins: [importCdn({ fetchImpl })],
+			plugins: [skypackCdn({ fetchImpl })],
 		});
 		const { output } = await bundle.generate({ format: "cjs" });
 		await bundle.close();
@@ -821,7 +825,7 @@ describe("Rollup build", () => {
 		await writeFile(entry, `import { direct } from "${DIRECT}";\nconsole.log(direct);`);
 		const integrity = integrityFor('export const direct = "DIRECT";');
 
-		const code = await build({ input: entry, plugins: [importCdn({ fetchImpl, integrity })] });
+		const code = await build({ input: entry, plugins: [skypackCdn({ fetchImpl, integrity })] });
 
 		expect(code).toContain('"DIRECT"');
 	});
@@ -841,7 +845,7 @@ describe("Rollup build", () => {
 			onwarn: (warning) => {
 				warnings.push(warning);
 			},
-			plugins: [importCdn({ fetchImpl, integrity })],
+			plugins: [skypackCdn({ fetchImpl, integrity })],
 		});
 		await bundle.close();
 
@@ -864,14 +868,14 @@ describe("Rollup build", () => {
 				[pinned]: `sha384-${createHash("sha384").update(cdn[PKG_B]!.body).digest("base64")}`,
 			},
 		};
-		await build({ input: entry, plugins: [importCdn({ ...options, fetchImpl })] });
+		await build({ input: entry, plugins: [skypackCdn({ ...options, fetchImpl })] });
 
 		const offline = vi.fn<FetchImpl>(async () => {
 			throw new Error("The cache should have served every URL");
 		});
 		const code = await build({
 			input: entry,
-			plugins: [importCdn({ ...options, fetchImpl: offline })],
+			plugins: [skypackCdn({ ...options, fetchImpl: offline })],
 		});
 
 		expect(offline).not.toHaveBeenCalled();
@@ -884,7 +888,7 @@ describe("Rollup build", () => {
 		const integrity = integrityFor("export const direct = 1;");
 
 		await expect(
-			rollup({ input: entry, plugins: [importCdn({ fetchImpl, integrity })] }),
+			rollup({ input: entry, plugins: [skypackCdn({ fetchImpl, integrity })] }),
 		).rejects.toThrow(`Integrity check failed for ${DIRECT}: expected ${integrity[DIRECT]}`);
 	});
 });
