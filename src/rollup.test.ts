@@ -52,8 +52,8 @@ const cdn: Record<string, { url?: string; body: string }> = {
 
 // esm.sh shapes seen with curl on 2026-11-01: pinned stubs, minified imports, a range and a /node/ polyfill.
 const ESM_SH_LIB = "https://esm.sh/lib@1.0.0/es2022/lib.mjs";
-// The rewrite resolves `/sched@^1.0.0` with `URL`, which encodes `^`; esm.sh serves both forms.
-const ESM_SH_SCHED_RANGE = "https://esm.sh/sched@%5E1.0.0?target=es2022";
+// The rewrite resolves with `URL`, which keeps `^` on Node 22 and encodes it as `%5E` on Node 24.
+const ESM_SH_SCHED_RANGE = new URL("/sched@^1.0.0?target=es2022", "https://esm.sh/").href;
 const esmShLibStub = {
 	body: '/* esm.sh - lib@1.0.0 */\nexport * from "/lib@1.0.0/es2022/lib.mjs";',
 };
