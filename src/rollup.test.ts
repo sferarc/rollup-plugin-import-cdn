@@ -126,9 +126,13 @@ async function build(options: RollupOptions) {
 	return output.map((chunk) => (chunk.type === "chunk" ? chunk.code : "")).join("\n");
 }
 
-// The OS watcher may not be armed when the first build ends, so `rebuild` rewrites the file until one fires.
+// macOS FSEvents can take seconds to report a change, so chokidar polls; `rebuild` rewrites the file until a poll sees it.
 function startWatch(options: RollupWatchOptions) {
-	const watcher = watch({ onwarn: (warning) => expect.fail(warning.message), ...options });
+	const watcher = watch({
+		onwarn: (warning) => expect.fail(warning.message),
+		watch: { chokidar: { usePolling: true, interval: 50 } },
+		...options,
+	});
 	const failure = new Promise<never>((_, reject) => {
 		watcher.on("event", (event) => {
 			if (event.code === "ERROR") reject(event.error);
