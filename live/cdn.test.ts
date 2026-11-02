@@ -7,12 +7,16 @@ import { type AvailableCDNs, type FetchImpl, importCdn } from "../src/index";
 
 // Hits the real CDNs, so it runs only through `pnpm test:live` and the scheduled live workflow.
 const PREACT = "10.19.3";
+// Skypack answers 404 for many pinned scoped versions, so this has to be one it still serves.
+const POPPER = "2.11.8";
 
 const ENTRY = [
 	'import { h, render } from "preact";',
 	'import { useState } from "preact/hooks";',
 	"console.log(h, render, useState);",
 ].join("\n");
+
+const SCOPED_ENTRY = 'import { createPopper } from "@popperjs/core";\nconsole.log(createPopper);';
 
 async function build(options: RollupOptions) {
 	const bundle = await rollup({
@@ -41,12 +45,11 @@ describe.each<AvailableCDNs>(["skypack", "esm.sh", "jsdelivr"])("live %s", (cdn)
 		await rm(dir, { recursive: true, force: true });
 	});
 
-	it("bundles a pinned package and its subpath, then rebuilds from the cache offline", async () => {
-		const options = {
-			priority: [cdn],
-			versions: { preact: PREACT },
-			cache: path.join(dir, "cache"),
-		};
+	async function expectPinnedOfflineRebuild(
+		versions: Record<string, string>,
+		otherVersion: RegExp,
+	) {
+		const options = { priority: [cdn], versions, cache: path.join(dir, "cache") };
 
 		const online = await build({ input: entry, plugins: [importCdn(options)] });
 		expect(online.imports).toEqual([]);
@@ -54,7 +57,7 @@ describe.each<AvailableCDNs>(["skypack", "esm.sh", "jsdelivr"])("live %s", (cdn)
 		// Imports rewritten inside CDN modules are ids, so this catches a module served at another version.
 		const cdnModules = Object.keys(online.modules).filter((id) => id !== entry);
 		expect(cdnModules.length).toBeGreaterThan(0);
-		for (const id of cdnModules) expect(id).not.toMatch(/preact@v?(?!10\.19\.3)\d/);
+		for (const id of cdnModules) expect(id).not.toMatch(otherVersion);
 
 		const offline: FetchImpl = async (url) => {
 			throw new Error(`Not cached: ${url}`);
@@ -64,6 +67,18 @@ describe.each<AvailableCDNs>(["skypack", "esm.sh", "jsdelivr"])("live %s", (cdn)
 			plugins: [importCdn({ ...options, fetchImpl: offline })],
 		});
 		expect(cached.code).toBe(online.code);
+	}
+
+	it("bundles a pinned package and its subpath, then rebuilds from the cache offline", async () => {
+		await expectPinnedOfflineRebuild({ preact: PREACT }, /preact@v?(?!10\.19\.3)\d/);
+	});
+
+	it("bundles a pinned scoped package, then rebuilds from the cache offline", async () => {
+		await writeFile(entry, SCOPED_ENTRY);
+		await expectPinnedOfflineRebuild(
+			{ "@popperjs/core": POPPER },
+			/@popperjs\/core@v?(?!2\.11\.8)\d/,
+		);
 	});
 
 	it("fails the build naming the URL for a package that does not exist", async () => {
