@@ -16,7 +16,6 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      issues: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -27,10 +26,22 @@ jobs:
       - name: Test against the real CDNs
         run: pnpm test:live
 
+      # Lanes only take ready issues opened by the sferarc-hq App, so github.token would file one nobody picks up.
+      - name: Mint the sferarc-hq App token
+        id: app
+        if: failure() && github.event_name == 'schedule'
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          app-id: ${{ secrets.HQ_APP_ID }}
+          private-key: ${{ secrets.HQ_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ github.event.repository.name }}
+          permission-issues: write
+
       - name: Report the failure
         if: failure() && github.event_name == 'schedule'
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ steps.app.outputs.token }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           title="Live CDN check failed"
@@ -39,6 +50,6 @@ jobs:
             gh issue comment "$open" --body "Failed again: $RUN_URL"
           else
             gh issue create --title "$title" \
-              --label product:rollup-plugin-import-cdn --label bug --label p2 \
+              --label product:rollup-plugin-import-cdn --label bug --label p2 --label ready \
               --body "The weekly build through the real CDNs failed: $RUN_URL. Read the failing test in \`live/cdn.test.ts\`, recheck the CDN with \`curl\` and record what changed in \`brain/architecture/resolution.md\`."
           fi
