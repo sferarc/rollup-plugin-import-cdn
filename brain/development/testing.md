@@ -1,6 +1,6 @@
 # Testing
 
-`pnpm test` runs vitest in a Node environment with `restoreMocks: true` (`vitest.config.ts`) over `src/**/*.test.ts`, the config's `include`, so `live/` stays out of it. Globals are off since #35, so each test file imports what it uses (`describe`, `it`, `expect`, `vi`, hooks) from `vitest`, and `restoreMocks` restores spies between tests. On 2026-10-30 the suite was 6 files and 304 tests (`it.each` cases counted separately), about two seconds wall clock on an idle machine; under heavy load the watch-mode rebuild test in `src/rollup.test.ts` can exceed the 5 s default timeout, so rerun it alone before treating a failure as real.
+`pnpm test` runs vitest in a Node environment with `restoreMocks: true` (`vitest.config.ts`) over `src/**/*.test.ts`, the config's `include`, so `live/` stays out of it. Globals are off since #35, so each test file imports what it uses (`describe`, `it`, `expect`, `vi`, hooks) from `vitest`, and `restoreMocks` restores spies between tests. On 2026-10-30 the suite was 6 files and 304 tests (`it.each` cases counted separately), about two seconds wall clock on an idle machine. The two `rollup.watch` tests in `src/rollup.test.ts` pass `watch.chokidar: { usePolling: true, interval: 50 }` through `startWatch` (#118): with macOS FSEvents a rebuild sometimes waited 2 to 12 seconds for the change event and hit the 5 s default timeout even run alone, while polling sees the change in about 150 ms.
 
 | File | Covers |
 | --- | --- |
