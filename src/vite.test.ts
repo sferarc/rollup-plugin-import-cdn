@@ -1,7 +1,7 @@
 import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { build, createServer, type Plugin, type Rolldown } from "vite";
+import { build, createServer, type Plugin, type Rolldown, type WatchOptions } from "vite";
 import { afterEach, beforeEach, describe, expect, it, type MockInstance, vi } from "vitest";
 import { importCdn } from "./index";
 import type { FetchImpl } from "./types";
@@ -180,11 +180,15 @@ describe("Vite build", () => {
 			path.join(root, "main.js"),
 			'import { used } from "pkg-a";\nconsole.log(used(), "V1");',
 		);
+		// Polling, since macOS FSEvents can report a change seconds late. Vite builds Rolldown's `watcher` from `chokidar`, which its type omits.
+		const watch: Rolldown.WatcherOptions & { chokidar: WatchOptions } = {
+			chokidar: { usePolling: true, interval: 50 },
+		};
 		const watcher = (await build({
 			root,
 			configFile: false,
 			logLevel: "silent",
-			build: { watch: {}, minify: false },
+			build: { watch, minify: false },
 			plugins: [cdnPlugin(fetchImpl)],
 		})) as Rolldown.RolldownWatcher;
 		const nextEnd = () =>
