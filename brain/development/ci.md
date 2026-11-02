@@ -36,7 +36,7 @@ The suite passed on Rollup 3.0.0 apart from the `onLog` test, which `src/rollup.
 
 ## Live CDN
 
-`.github/workflows/live-cdn.yml` runs `pnpm test:live` ([[testing]], "Live check") on Mondays at 06:17 UTC and on `workflow_dispatch`, on `ubuntu-latest` (#115). It is a separate workflow, not a job in `ci.yml`, so a CDN outage never fails a pull request. When a scheduled run fails, a last step uses `github.token` with `issues: write` to open an issue titled "Live CDN check failed" labelled `product:rollup-plugin-import-cdn`, `bug` and `p2`, or to comment the run link on the one already open. A manual run only shows its result in the Actions tab.
+`.github/workflows/live-cdn.yml` runs `pnpm test:live` ([[testing]], "Live check") on Mondays at 06:17 UTC and on `workflow_dispatch`, on `ubuntu-latest` (#115). It is a separate workflow, not a job in `ci.yml`, so a CDN outage never fails a pull request. When a scheduled run fails, the last steps mint a sferarc-hq App token with `issues: write` (from the org secrets `HQ_APP_ID` and `HQ_APP_PRIVATE_KEY`, as in `release.yml`) and open an issue titled "Live CDN check failed" labelled `product:rollup-plugin-import-cdn`, `bug`, `p2` and `ready`, or comment the run link on the one already open (#124). Lanes take only `ready` issues opened by SferaDev or the sferarc-hq or pgbeam-hq Apps, so the `github.token` issue it filed before, authored by `github-actions[bot]` and without `ready`, would never have been picked up. A manual run only shows its result in the Actions tab.
 
 ## Branch rules on `main`
 
