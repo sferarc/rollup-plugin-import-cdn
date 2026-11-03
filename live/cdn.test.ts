@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -16,6 +17,8 @@ const REACT = "18.2.0";
 const SKYPACK_UNBUILDABLE = "3.4.0";
 // jsDelivr served this pin's `+esm` as `/** Failed to bundle ...` with HTTP 200 (same note).
 const JSDELIVR_UNBUILDABLE = "2.3.3";
+// The README's integrity example hashes this URL.
+const LODASH = "4.17.21";
 
 const ENTRY = [
 	'import { h, render } from "preact";',
@@ -213,5 +216,51 @@ describe("live CDN build errors", () => {
 		).rejects.toThrow(
 			/Failed to fetch fsevents from https:\/\/cdn\.jsdelivr\.net\/npm\/fsevents@2\.3\.3\/\+esm: jsDelivr could not build the package \(Failed to bundle/,
 		);
+	});
+});
+
+// The README has users hash the raw bytes with curl and openssl, while the plugin hashes text() as UTF-8.
+describe("live esm.sh integrity", () => {
+	let dir: string;
+
+	beforeEach(async () => {
+		dir = await mkdtemp(path.join(tmpdir(), "import-cdn-live-"));
+	});
+
+	afterEach(async () => {
+		await rm(dir, { recursive: true, force: true });
+	});
+
+	it("builds with sha384 values of the raw bytes and fails on a tampered one", async () => {
+		const entry = path.join(dir, "index.js");
+		await writeFile(entry, 'import _ from "lodash";\nconsole.log(_.chunk);');
+		const hashes: Record<string, string> = {};
+		const hashing: FetchImpl = async (url, init) => {
+			const response = await fetch(url, init);
+			const bytes = new Uint8Array(await response.clone().arrayBuffer());
+			hashes[url] = `sha384-${createHash("sha384").update(bytes).digest("base64")}`;
+			return response;
+		};
+		const options = { priority: ["esm.sh" as const], versions: { lodash: LODASH } };
+
+		const online = await build({
+			input: entry,
+			plugins: [importCdn({ ...options, fetchImpl: hashing })],
+		});
+		const stub = `https://esm.sh/lodash@${LODASH}`;
+		expect(Object.keys(hashes)).toContain(stub);
+		expect(Object.keys(hashes).length).toBeGreaterThan(1);
+
+		// `build` fails on any warning, so every entry also has to match a fetched URL.
+		const checked = await build({
+			input: entry,
+			plugins: [importCdn({ ...options, integrity: hashes })],
+		});
+		expect(checked.code).toBe(online.code);
+
+		const tampered = { ...hashes, [stub]: `sha384-${"A".repeat(64)}` };
+		await expect(
+			build({ input: entry, plugins: [importCdn({ ...options, integrity: tampered })] }),
+		).rejects.toThrow(`Integrity check failed for ${stub}`);
 	});
 });
