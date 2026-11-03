@@ -9,6 +9,7 @@ import { type AvailableCDNs, type FetchImpl, importCdn } from "../src/index";
 const PREACT = "10.19.3";
 // Skypack answers 404 for many pinned scoped versions, so this has to be one it still serves.
 const POPPER = "2.11.8";
+const REACT_DOM = "18.2.0";
 
 const ENTRY = [
 	'import { h, render } from "preact";',
@@ -87,5 +88,53 @@ describe.each<AvailableCDNs>(["skypack", "esm.sh", "jsdelivr"])("live %s", (cdn)
 		await expect(
 			build({ input: entry, plugins: [importCdn({ priority: [cdn] })] }),
 		).rejects.toThrow(/rollup-plugin-import-cdn-no-such-package-0.*HTTP 4\d\d/);
+	});
+});
+
+describe("live esm.sh deps query", () => {
+	let dir: string;
+	let entry: string;
+
+	beforeEach(async () => {
+		dir = await mkdtemp(path.join(tmpdir(), "import-cdn-live-"));
+		entry = path.join(dir, "index.js");
+	});
+
+	afterEach(async () => {
+		await rm(dir, { recursive: true, force: true });
+	});
+
+	async function buildOnlineThenOffline(specifier: string) {
+		await writeFile(entry, `import ReactDOM from "${specifier}";\nconsole.log(ReactDOM);`);
+		const options = {
+			priority: ["esm.sh" as const],
+			versions: { "react-dom": REACT_DOM },
+			cache: path.join(dir, "cache"),
+		};
+		const online = await build({ input: entry, plugins: [importCdn(options)] });
+		const requested: string[] = [];
+		const offline: FetchImpl = async (url) => {
+			requested.push(url);
+			throw new Error(`Not cached: ${url}`);
+		};
+		const plugin = importCdn({ ...options, fetchImpl: offline });
+		return { online, requested, rebuild: () => build({ input: entry, plugins: [plugin] }) };
+	}
+
+	it("fetches the range import of an unpinned dependency on every build", async () => {
+		const { requested, rebuild } = await buildOnlineThenOffline("react-dom");
+
+		await expect(rebuild()).rejects.toThrow(/Not cached: https:\/\/esm\.sh\/scheduler@%5E/);
+		expect(requested).toEqual([expect.stringMatching(/^https:\/\/esm\.sh\/scheduler@%5E/)]);
+	});
+
+	it("pins that dependency with deps, so the offline rebuild matches", async () => {
+		const { online, requested, rebuild } = await buildOnlineThenOffline(
+			"react-dom?deps=scheduler@0.23.2",
+		);
+
+		const cached = await rebuild();
+		expect(requested).toEqual([]);
+		expect(cached.code).toBe(online.code);
 	});
 });
