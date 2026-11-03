@@ -17,6 +17,8 @@ const REACT = "18.2.0";
 const SKYPACK_UNBUILDABLE = "3.4.0";
 // jsDelivr served this pin's `+esm` as `/** Failed to bundle ...` with HTTP 200 (same note).
 const JSDELIVR_UNBUILDABLE = "2.3.3";
+// esm.sh's build of this pin imports `/node/process.mjs`, an unpinned polyfill.
+const FSEVENTS = "2.3.3";
 // The README's integrity example hashes this URL.
 const LODASH = "4.17.21";
 
@@ -145,6 +147,43 @@ describe("live esm.sh deps query", () => {
 		const cached = await rebuild();
 		expect(requested).toEqual([]);
 		expect(cached.code).toBe(online.code);
+	});
+});
+
+describe("live esm.sh /node/ polyfill", () => {
+	let dir: string;
+
+	beforeEach(async () => {
+		dir = await mkdtemp(path.join(tmpdir(), "import-cdn-live-"));
+	});
+
+	afterEach(async () => {
+		await rm(dir, { recursive: true, force: true });
+	});
+
+	it("fetches the unpinned /node/ polyfill imports on every build", async () => {
+		const entry = path.join(dir, "index.js");
+		await writeFile(entry, 'import fsevents from "fsevents";\nconsole.log(fsevents);');
+		const options = {
+			priority: ["esm.sh" as const],
+			versions: { fsevents: FSEVENTS },
+			cache: path.join(dir, "cache"),
+		};
+
+		const online = await build({ input: entry, plugins: [importCdn(options)] });
+		const cdnModules = Object.keys(online.modules).filter((id) => id !== entry);
+		expect(cdnModules).toContain("https://esm.sh/node/process.mjs");
+
+		const requested: string[] = [];
+		const offline: FetchImpl = async (url) => {
+			requested.push(url);
+			throw new Error(`Not cached: ${url}`);
+		};
+		await expect(
+			build({ input: entry, plugins: [importCdn({ ...options, fetchImpl: offline })] }),
+		).rejects.toThrow(/Not cached: https:\/\/esm\.sh\/node\//);
+		expect(requested.length).toBeGreaterThan(0);
+		for (const url of requested) expect(url).toMatch(/^https:\/\/esm\.sh\/node\/[\w-]+\.mjs$/);
 	});
 });
 
