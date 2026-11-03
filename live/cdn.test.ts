@@ -12,6 +12,10 @@ const POPPER = "2.11.8";
 const REACT_DOM = "18.2.0";
 // Skypack served 17.0.1 for this pin on 2026-10-26 and 2026-10-28.
 const REACT = "18.2.0";
+// Skypack redirected this pin to `/error/build:...` with HTTP 200 (brain/architecture/resolution.md).
+const SKYPACK_UNBUILDABLE = "3.4.0";
+// jsDelivr served this pin's `+esm` as `/** Failed to bundle ...` with HTTP 200 (same note).
+const JSDELIVR_UNBUILDABLE = "2.3.3";
 
 const ENTRY = [
 	'import { h, render } from "preact";',
@@ -165,5 +169,49 @@ describe("live Skypack served version", () => {
 		for (const id of cdnModules) expect(id).not.toMatch(/react@v?(?!18\.2\.0)\d/);
 		expect(chunk.code).toContain(`"${REACT}"`);
 		expect(chunk.code).not.toMatch(/"17\.0\.\d"/);
+	});
+});
+
+// Both CDNs answer HTTP 200 for a package they cannot build, with a module that throws when run.
+// A side-effect import bundles that module without complaint unless the plugin rejects it.
+describe("live CDN build errors", () => {
+	let dir: string;
+	let entry: string;
+
+	beforeEach(async () => {
+		dir = await mkdtemp(path.join(tmpdir(), "import-cdn-live-"));
+		entry = path.join(dir, "index.js");
+	});
+
+	afterEach(async () => {
+		await rm(dir, { recursive: true, force: true });
+	});
+
+	it("fails the build when Skypack redirects to its build error page", async () => {
+		await writeFile(entry, 'import "vue";');
+
+		await expect(
+			build({
+				input: entry,
+				plugins: [importCdn({ priority: ["skypack"], versions: { vue: SKYPACK_UNBUILDABLE } })],
+			}),
+		).rejects.toThrow(
+			/Failed to fetch vue from https:\/\/cdn\.skypack\.dev\/vue@3\.4\.0: Skypack could not build the package \(https:\/\/cdn\.skypack\.dev\/error\/build:/,
+		);
+	});
+
+	it("fails the build when jsDelivr serves a module that failed to bundle", async () => {
+		await writeFile(entry, 'import "fsevents";');
+
+		await expect(
+			build({
+				input: entry,
+				plugins: [
+					importCdn({ priority: ["jsdelivr"], versions: { fsevents: JSDELIVR_UNBUILDABLE } }),
+				],
+			}),
+		).rejects.toThrow(
+			/Failed to fetch fsevents from https:\/\/cdn\.jsdelivr\.net\/npm\/fsevents@2\.3\.3\/\+esm: jsDelivr could not build the package \(Failed to bundle/,
+		);
 	});
 });
