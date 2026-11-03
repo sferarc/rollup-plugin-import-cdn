@@ -10,6 +10,8 @@ const PREACT = "10.19.3";
 // Skypack answers 404 for many pinned scoped versions, so this has to be one it still serves.
 const POPPER = "2.11.8";
 const REACT_DOM = "18.2.0";
+// Skypack served 17.0.1 for this pin on 2026-10-26 and 2026-10-28.
+const REACT = "18.2.0";
 
 const ENTRY = [
 	'import { h, render } from "preact";',
@@ -136,5 +138,32 @@ describe("live esm.sh deps query", () => {
 		const cached = await rebuild();
 		expect(requested).toEqual([]);
 		expect(cached.code).toBe(online.code);
+	});
+});
+
+describe("live Skypack served version", () => {
+	let dir: string;
+
+	beforeEach(async () => {
+		dir = await mkdtemp(path.join(tmpdir(), "import-cdn-live-"));
+	});
+
+	afterEach(async () => {
+		await rm(dir, { recursive: true, force: true });
+	});
+
+	it("bundles the pinned react whether Skypack serves it or esm.sh takes over", async () => {
+		const entry = path.join(dir, "index.js");
+		await writeFile(entry, 'import { version } from "react";\nconsole.log(version);');
+
+		const chunk = await build({
+			input: entry,
+			plugins: [importCdn({ priority: ["skypack", "esm.sh"], versions: { react: REACT } })],
+		});
+		const cdnModules = Object.keys(chunk.modules).filter((id) => id !== entry);
+		expect(cdnModules).toContainEqual(expect.stringMatching(/react@v?18\.2\.0/));
+		for (const id of cdnModules) expect(id).not.toMatch(/react@v?(?!18\.2\.0)\d/);
+		expect(chunk.code).toContain(`"${REACT}"`);
+		expect(chunk.code).not.toMatch(/"17\.0\.\d"/);
 	});
 });
