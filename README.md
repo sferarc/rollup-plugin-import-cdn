@@ -1,13 +1,24 @@
 # rollup-plugin-import-cdn
 
-Import ESM modules from URLs for local processing by Rollup, enabling tree-shaking on non-local resources.
+Bundle ESM packages and URL imports from a CDN as if they were local code, so Rollup or Vite resolves, tree-shakes and bundles them instead of leaving them as external requests.
+
+It is for builds that take packages from a CDN instead of `node_modules`: source that imports URLs such as `https://esm.sh/canvas-confetti`, sandboxes and playgrounds with no install step, and packages you would rather fetch as ESM than install. It works with Rollup 3 and 4, and with Vite 8 in both `vite build` and `vite dev` (see [Vite](#vite)).
 
 ## Features
 
-- **CDN Imports** - Import npm packages directly from CDN URLs
-- **Tree-shaking** - Full tree-shaking support for CDN modules
-- **Multiple CDNs** - Skypack, esm.sh and jsDelivr built in, with custom CDN fallback chains
-- **Version Pinning** - Pin specific package versions for reproducible builds
+- **CDN imports:** bare names such as `lodash-es` and full URLs, fetched at build time and bundled with your code.
+- **Tree-shaking:** CDN modules go through Rollup like local files, so unused exports are dropped.
+- **Built-in CDNs:** esm.sh by default, with jsDelivr and Skypack also built in; `priority` sets which ones are tried and in what fallback order.
+- **Custom resolvers:** a function in `priority` maps a specifier to any URL. See [Custom CDN](#custom-cdn).
+- **Version pinning:** `versions` pins packages and their subpaths for reproducible builds. See [Version Pinning](#version-pinning).
+- **Integrity:** `integrity` fails the build when fetched code does not match an SRI hash. See [Integrity](#integrity).
+- **Fetch cache:** `cache` keeps responses for pinned URLs on disk, so later builds skip the network. See [Fetch Cache](#fetch-cache).
+
+## When not to use it
+
+- **Offline or network-free builds without `cache`.** Every build fetches every CDN module again unless `cache` is set, and only URLs pinned to an exact version are cached. Unpinned imports always hit the network.
+- **Relying on `integrity` in `vite dev`.** Under the dev server, URL imports and the absolute URLs written into CDN modules are loaded by the browser straight from the CDN, so `integrity` does not check them. It covers `vite build` and Rollup builds.
+- **Packages you already install.** A package in `node_modules` is better served from there; under Vite the plugin already prefers it.
 
 ## Installation
 
