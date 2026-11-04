@@ -1,6 +1,6 @@
 {
 	"name": "rollup-plugin-import-cdn",
-	"version": "0.5.2",
+	"version": "0.5.3",
 	"description": "Rollup and Vite plugin that bundles bare and URL imports from esm.sh, jsDelivr or Skypack, with tree-shaking, pinning, SRI and an offline cache",
 	"type": "module",
 	"sideEffects": false,

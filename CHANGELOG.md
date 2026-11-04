@@ -1,5 +1,11 @@
 # rollup-plugin-import-cdn
 
+## 0.5.3
+
+### Patch Changes
+
+- 43e62f8: Declare Vite 8 as an optional peer dependency, so the Vite plugin registry lists the plugin as compatible with Vite 8 while Rollup-only installs print no missing peer warning.
+
 ## 0.5.2
 
 ### Patch Changes
