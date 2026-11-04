@@ -13,6 +13,8 @@ const POPPER = "2.11.8";
 const REACT_DOM = "18.2.0";
 // Skypack served 17.0.1 for this pin on 2026-10-26 and 2026-10-28.
 const REACT = "18.2.0";
+// jsDelivr's react-dom@18.2.0 build imported this exact version on 2026-11-04.
+const SCHEDULER = "0.23.2";
 // Skypack redirected this pin to `/error/build:...` with HTTP 200 (brain/architecture/resolution.md).
 const SKYPACK_UNBUILDABLE = "3.4.0";
 // jsDelivr served this pin's `+esm` as `/** Failed to bundle ...` with HTTP 200 (same note).
@@ -146,6 +148,61 @@ describe("live esm.sh deps query", () => {
 
 		const cached = await rebuild();
 		expect(requested).toEqual([]);
+		expect(cached.code).toBe(online.code);
+	});
+});
+
+// jsDelivr serves an unpinned package without redirecting, while its modules import dependencies at an exact version.
+describe("live jsDelivr dependency versions", () => {
+	let dir: string;
+	let entry: string;
+
+	beforeEach(async () => {
+		dir = await mkdtemp(path.join(tmpdir(), "import-cdn-live-"));
+		entry = path.join(dir, "index.js");
+		await writeFile(
+			entry,
+			'import React from "react";\nimport ReactDOM from "react-dom";\nconsole.log(React, ReactDOM);',
+		);
+	});
+
+	afterEach(async () => {
+		await rm(dir, { recursive: true, force: true });
+	});
+
+	// A bare import's id is its specifier, and a CDN import of the URL it resolved to dedupes onto it.
+	const reactModules = (chunk: { modules: Record<string, unknown> }) =>
+		Object.keys(chunk.modules).filter((id) => id === "react" || /\/npm\/react@/.test(id));
+
+	it("bundles two copies of an unpinned package that a dependency imports", async () => {
+		const chunk = await build({ input: entry, plugins: [importCdn({ priority: ["jsdelivr"] })] });
+
+		expect(reactModules(chunk)).toEqual([
+			"react",
+			expect.stringMatching(/^https:\/\/cdn\.jsdelivr\.net\/npm\/react@\d+\.\d+\.\d+\/\+esm$/),
+		]);
+	});
+
+	it("bundles one copy when both are pinned, then rebuilds from the cache offline", async () => {
+		const options = {
+			priority: ["jsdelivr" as const],
+			versions: { react: REACT, "react-dom": REACT_DOM },
+			cache: path.join(dir, "cache"),
+		};
+
+		const online = await build({ input: entry, plugins: [importCdn(options)] });
+		expect(reactModules(online)).toEqual(["react"]);
+		expect(Object.keys(online.modules)).toContain(
+			`https://cdn.jsdelivr.net/npm/scheduler@${SCHEDULER}/+esm`,
+		);
+
+		const offline: FetchImpl = async (url) => {
+			throw new Error(`Not cached: ${url}`);
+		};
+		const cached = await build({
+			input: entry,
+			plugins: [importCdn({ ...options, fetchImpl: offline })],
+		});
 		expect(cached.code).toBe(online.code);
 	});
 });
