@@ -1,6 +1,6 @@
 # Overview
 
-rollup-plugin-import-cdn lets Rollup import ESM packages and URLs from a CDN and process them like local code, so they take part in tree-shaking (`README.md`). It is published to npm as `rollup-plugin-import-cdn`, dual ESM and CJS (`package.json` `exports`), with Rollup 3 or 4 as a peer dependency and `es-module-lexer` as its only runtime dependency.
+rollup-plugin-import-cdn lets Rollup import ESM packages and URLs from a CDN and process them like local code, so they take part in tree-shaking (`README.md`). It is published to npm as `rollup-plugin-import-cdn`, dual ESM and CJS (`package.json` `exports`), with Rollup 3 or 4 as a peer dependency and `es-module-lexer` as its only runtime dependency. Its npm `description` and `keywords` name Vite and esm.sh, jsDelivr and Skypack, and carry `rollup-plugin` and `vite-plugin`, the keywords npm search and Vite plugin lists match on ([#151](https://github.com/sferarc/rollup-plugin-import-cdn/issues/151)).
 
 ## Module map
 
