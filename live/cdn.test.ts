@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { type RollupOptions, rollup } from "rollup";
+import { type RollupOptions, rollup, type SourceMap } from "rollup";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { type AvailableCDNs, type FetchImpl, importCdn } from "../src/index";
 
@@ -358,5 +358,48 @@ describe("live esm.sh integrity", () => {
 		await expect(
 			build({ input: entry, plugins: [importCdn({ ...options, integrity: tampered })] }),
 		).rejects.toThrow(`Integrity check failed for ${stub}`);
+	});
+});
+
+// The README's Sourcemaps paragraph names this exact URL as an example source.
+describe("live esm.sh sourcemap", () => {
+	let dir: string;
+
+	beforeEach(async () => {
+		dir = await mkdtemp(path.join(tmpdir(), "import-cdn-live-"));
+	});
+
+	afterEach(async () => {
+		await rm(dir, { recursive: true, force: true });
+	});
+
+	it("names the served module by its URL and puts it on the ignore list", async () => {
+		const entry = path.join(dir, "index.js");
+		await writeFile(entry, 'import { version } from "react";\nconsole.log(version);');
+		const bundle = await rollup({
+			input: entry,
+			onwarn: (warning) => expect.fail(warning.message),
+			plugins: [importCdn({ priority: ["esm.sh"], versions: { react: REACT } })],
+		});
+		const { output } = await bundle.generate({
+			format: "es",
+			sourcemap: true,
+			file: path.join(dir, "dist", "bundle.js"),
+		});
+		await bundle.close();
+
+		// Rollup writes `x_google_ignoreList` on output maps but leaves it out of the `SourceMap` type.
+		const map = output[0].map as (SourceMap & { x_google_ignoreList?: number[] }) | null;
+		const sources = map?.sources ?? [];
+		const ignored = (map?.x_google_ignoreList ?? []).map((index) => sources[index]);
+		expect(sources).toContain(`https://esm.sh/react@${REACT}/es2022/react.mjs`);
+		expect(sources).toContain("../index.js");
+		for (const source of sources) {
+			if (source === "../index.js") expect(ignored).not.toContain(source);
+			else {
+				expect(source).toMatch(/^https:\/\/esm\.sh\//);
+				expect(ignored).toContain(source);
+			}
+		}
 	});
 });
