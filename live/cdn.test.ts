@@ -403,3 +403,55 @@ describe("live esm.sh sourcemap", () => {
 		}
 	});
 });
+
+// The README's Version Pinning examples; Skypack served react-dom@17.0.1 and a 404 for them on 2026-11-04.
+describe.each<[AvailableCDNs, string, string]>([
+	["esm.sh", "https://esm.sh/react-dom@18.2.0/client", "https://esm.sh/preact@10.19.3?dev"],
+	[
+		"jsdelivr",
+		"https://cdn.jsdelivr.net/npm/react-dom@18.2.0/client/+esm",
+		"https://cdn.jsdelivr.net/npm/preact@10.19.3/+esm?dev",
+	],
+])("live %s version pinning", (cdn, subpathUrl, queryUrl) => {
+	let dir: string;
+	let entry: string;
+
+	beforeEach(async () => {
+		dir = await mkdtemp(path.join(tmpdir(), "import-cdn-live-"));
+		entry = path.join(dir, "index.js");
+	});
+
+	afterEach(async () => {
+		await rm(dir, { recursive: true, force: true });
+	});
+
+	async function requestedUrls(source: string, versions: Record<string, string>) {
+		await writeFile(entry, source);
+		const requested: string[] = [];
+		const recording: FetchImpl = async (url, init) => {
+			requested.push(url);
+			return fetch(url, init);
+		};
+		const chunk = await build({
+			input: entry,
+			plugins: [importCdn({ priority: [cdn], versions, fetchImpl: recording })],
+		});
+		expect(chunk.imports).toEqual([]);
+		return requested;
+	}
+
+	it("puts the package pin before a subpath", async () => {
+		const requested = await requestedUrls(
+			'import { createRoot } from "react-dom/client";\nconsole.log(createRoot);',
+			{ "react-dom": REACT_DOM },
+		);
+		expect(requested[0]).toBe(subpathUrl);
+	});
+
+	it("keeps a query after the pin", async () => {
+		const requested = await requestedUrls('import { h } from "preact?dev";\nconsole.log(h);', {
+			preact: PREACT,
+		});
+		expect(requested[0]).toBe(queryUrl);
+	});
+});
