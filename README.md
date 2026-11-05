@@ -154,6 +154,8 @@ Under `vite dev`, a fetched package is served by the dev server at `/@id/<name>`
 
 `vite build --watch` rebuilds through the plugin like a fresh build: every CDN module is fetched again on each rebuild, as under `rollup --watch`. Set `cache` to read pinned URLs from disk instead.
 
+[`examples/vite`](examples/vite) is a runnable Vite app that imports `preact` by bare name and by esm.sh URL, with pinned versions and a committed `cache`, so it builds offline.
+
 ## Documentation
 
 This README is the reference for the plugin's options and behaviour. The [CHANGELOG](CHANGELOG.md) lists changes by release.
