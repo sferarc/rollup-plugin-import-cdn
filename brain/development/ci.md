@@ -1,6 +1,6 @@
 # CI
 
-`.github/workflows/ci.yml` runs on pushes to `main` and on every pull request. Four jobs, `Check`, `Test (minimum Node)`, `Test (Rollup 3.0)` and `Test (Vite 8.1)`, all on `ubuntu-latest`: the repository is public, so it uses GitHub-hosted runners (comment in the workflow).
+`.github/workflows/ci.yml` runs on pushes to `main` and on every pull request. Five jobs, `Check`, `Test (minimum Node)`, `Test (Rollup 3.0)`, `Test (Vite 8.1)` and `Test (Rollup beta)`, all on `ubuntu-latest`: the repository is public, so it uses GitHub-hosted runners (comment in the workflow).
 
 ## Check steps
 
@@ -42,13 +42,17 @@ The range was `^8.0.0` (#157) and is now `^8.1.0`. On 2026-11-05, Vite 8.0.0 and
 
 Locally on macOS, every `src/vite.test.ts` test fails on Vite 8.0.x and 8.1.x when the temp root sits under the default `TMPDIR`, a `/var/folders` path behind the `/var` to `/private/var` symlink: a plain `vite build` without the plugin fails there too (`vite:build-html` emits `../../private/var/...` as a file name), so it is a Vite bug, fixed by 8.2.0. Set `TMPDIR` to a path with no symlink, such as one under `/private/tmp`, to run the suite on 8.1.0 locally. `ubuntu-latest` has no such symlink.
 
+## Rollup beta job
+
+`Test (Rollup beta)` (#188) runs the suite on the version behind Rollup's `beta` dist-tag, read with `npm view rollup@beta version` on each run, so a regression in the next major shows before it ships. It pins the catalog the way the Rollup 3 job does, asserts `rollup --version`, then runs `pnpm test`, `pnpm build` and `pnpm exec tsc -p types-check`. It is not a required check, so an upstream beta regression never blocks a pull request. On 2026-11-05, with `5.0.0-2`, all three passed locally; `pnpm typecheck` fails there only in `src/test-utils.ts`, because Rollup 5 requires `importerAttributes` in the `resolveId` options and passes `load` an options argument, so the job leaves it out. Widening the peer range to Rollup 5 waits on 5.0.0 (#189).
+
 ## Live CDN
 
 `.github/workflows/live-cdn.yml` runs `pnpm test:live` ([[testing]], "Live check") on Mondays at 06:17 UTC and on `workflow_dispatch`, on `ubuntu-latest` (#115). It is a separate workflow, not a job in `ci.yml`, so a CDN outage never fails a pull request. When a scheduled run fails, the last steps mint a sferarc-hq App token with `issues: write` (from the org secrets `HQ_APP_ID` and `HQ_APP_PRIVATE_KEY`, as in `release.yml`) and open an issue titled "Live CDN check failed" labelled `product:rollup-plugin-import-cdn`, `bug`, `p2` and `ready`, or comment the run link on the one already open (#124). Lanes take only `ready` issues opened by SferaDev or the sferarc-hq or pgbeam-hq Apps, so the `github.token` issue it filed before, authored by `github-actions[bot]` and without `ready`, would never have been picked up. A manual run only shows its result in the Actions tab.
 
 ## Branch rules on `main`
 
-The `main-default` ruleset, read from the GitHub API on 2026-10-08: `Check` is the one required status check, changes go through pull requests with squash or rebase merges, history is linear, and force pushes and deletion are blocked. That reading predates `Test (minimum Node)`, `Test (Rollup 3.0)` and `Test (Vite 8.1)`; whether the ruleset now requires either is unknown until the ruleset is read again.
+The `main-default` ruleset, read from the GitHub API on 2026-10-08: changes go through pull requests with squash or rebase merges, history is linear, and force pushes and deletion are blocked. Read again on 2026-11-05, its required status checks are `Check`, `Approved stack` and `No Claude attribution`, so none of the `Test (...)` jobs is required.
 
 ## Related
 
