@@ -48,6 +48,8 @@ import { debounce } from "lodash-es";
 import confetti from "https://esm.sh/canvas-confetti";
 ```
 
+[`examples/rollup`](examples/rollup) is a runnable Rollup build that imports `lodash-es/chunk` by bare name and `kebabCase` by esm.sh URL, with a pinned version and a committed `cache`, so it builds offline.
+
 ## Options
 
 | Option | Default | Description |
