@@ -73,6 +73,13 @@
 			"optional": true
 		}
 	},
+	"compatiblePackages": {
+		"schemaVersion": 1,
+		"rolldown": {
+			"type": "compatible",
+			"versions": "^1.2.16"
+		}
+	},
 	"devDependencies": {
 		"@biomejs/biome": "catalog:",
 		"@changesets/cli": "catalog:",
@@ -82,6 +89,7 @@
 		"is-tree-shakable": "catalog:",
 		"knip": "catalog:",
 		"lefthook": "catalog:",
+		"rolldown": "catalog:",
 		"rollup": "catalog:",
 		"typescript": "catalog:",
 		"vite": "catalog:",
