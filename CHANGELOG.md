@@ -1,5 +1,11 @@
 # rollup-plugin-import-cdn
 
+## 0.5.4
+
+### Patch Changes
+
+- 6d2cb88: Link a runnable Vite example from the README's Vite section.
+
 ## 0.5.3
 
 ### Patch Changes
