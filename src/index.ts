@@ -202,7 +202,7 @@ interface ImportCdnPlugin {
 	// Vite runs its own resolver before unordered plugins, and it marks every URL import external.
 	enforce: "pre";
 	configResolved: (config: { command: string }) => void;
-	buildStart: () => void;
+	buildStart: (this: { meta: { rollupVersion: string; rolldownVersion?: string } }) => void;
 	buildEnd: (this: HookContext, error?: Error) => void;
 	resolveId: (
 		this: HookContext,
@@ -236,6 +236,8 @@ export function importCdn(pluginOptions: ImportCdnOptions = {}): ImportCdnPlugin
 	// Set by the Vite-only `configResolved` hook; Rollup never calls it.
 	let isVite = false;
 	let isViteServe = false;
+	// Rolldown, standalone or under Vite 8, never calls resolveImportMeta.
+	let isRolldown = false;
 
 	// resolveId and load both resolve the same id, so each URL is fetched once per build.
 	// A failure, timeouts included, is kept too, so a hanging CDN costs one timeout per URL.
@@ -286,6 +288,7 @@ export function importCdn(pluginOptions: ImportCdnOptions = {}): ImportCdnPlugin
 			isViteServe = config.command === "serve";
 		},
 		buildStart() {
+			isRolldown = this.meta.rolldownVersion !== undefined;
 			responses.clear();
 			moduleUrls.clear();
 			modulesByUrl.clear();
@@ -347,8 +350,8 @@ export function importCdn(pluginOptions: ImportCdnOptions = {}): ImportCdnPlugin
 			if (!dependency) return;
 			// A rebuild from Rollup's cache reuses resolved ids and skips resolveId, but not load.
 			moduleUrls.set(key, dependency.url);
-			// Vite does not apply resolveImportMeta, so the URL is inlined here instead.
-			return rewriteImports(dependency, { inlineImportMetaUrl: isVite });
+			// Neither Vite nor Rolldown applies resolveImportMeta, so the URL is inlined here instead.
+			return rewriteImports(dependency, { inlineImportMetaUrl: isVite || isRolldown });
 		},
 		// Bundled, `import.meta.url` would name the output chunk, so `new URL("./x.wasm",
 		// import.meta.url)` inside a CDN module would point at a local file instead of the CDN.

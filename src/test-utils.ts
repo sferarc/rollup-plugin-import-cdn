@@ -1,9 +1,10 @@
 import type { NormalizedInputOptions, Plugin, PluginContext } from "rollup";
 
-// The plugin only logs through its hook context, so this fake records `warn` and `debug`.
+// The plugin only logs through its hook context and reads `meta`, so this fake records `warn` and `debug`.
 export function fakeContext({ withDebug = true } = {}) {
 	const logs = { warn: [] as string[], debug: [] as string[] };
 	const context = {
+		meta: { rollupVersion: "4.0.0", watchMode: false },
 		warn: (message: string) => logs.warn.push(message),
 		...(withDebug && { debug: (message: string) => logs.debug.push(message) }),
 	} as unknown as PluginContext;

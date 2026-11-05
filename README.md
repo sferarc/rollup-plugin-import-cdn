@@ -2,7 +2,7 @@
 
 Bundle ESM packages and URL imports from a CDN as if they were local code, so Rollup or Vite resolves, tree-shakes and bundles them instead of leaving them as external requests.
 
-It is for builds that take packages from a CDN instead of `node_modules`: source that imports URLs such as `https://esm.sh/canvas-confetti`, sandboxes and playgrounds with no install step, and packages you would rather fetch as ESM than install. It works with Rollup 3 and 4, and with Vite 8 in both `vite build` and `vite dev` (see [Vite](#vite)).
+It is for builds that take packages from a CDN instead of `node_modules`: source that imports URLs such as `https://esm.sh/canvas-confetti`, sandboxes and playgrounds with no install step, and packages you would rather fetch as ESM than install. It works with Rollup 3 and 4, with Vite 8 in both `vite build` and `vite dev` (see [Vite](#vite)), and with Rolldown 1.2.16 and later (see [Rolldown](#rolldown)).
 
 ## Features
 
@@ -155,6 +155,10 @@ Under `vite dev`, a fetched package is served by the dev server at `/@id/<name>`
 `vite build --watch` rebuilds through the plugin like a fresh build: every CDN module is fetched again on each rebuild, as under `rollup --watch`. Set `cache` to read pinned URLs from disk instead.
 
 [`examples/vite`](examples/vite) is a runnable Vite app that imports `preact` by bare name and by esm.sh URL, with pinned versions and a committed `cache`, so it builds offline.
+
+## Rolldown
+
+`importCdn()` works as a Rolldown plugin as well, tested with Rolldown 1.2.16 and later: pass it in `plugins` as with Rollup. Rolldown does not call Rollup's `resolveImportMeta` hook, so the plugin writes the served URL in place of `import.meta.url` inside CDN modules itself, as under Vite.
 
 ## Documentation
 
