@@ -98,6 +98,13 @@ jobs:
       - name: Test
         run: pnpm test
 
+      - name: Build
+        run: pnpm build
+
+      # tsc over the whole project fails on Rollup 3.0, so only a consumer of dist is checked.
+      - name: Typecheck the built types
+        run: pnpm exec tsc -p types-check
+
   # Runs the suite on the lowest Vite the optional peer range accepts.
   vite-8-1:
     name: Test (Vite 8.1)

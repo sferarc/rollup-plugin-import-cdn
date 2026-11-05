@@ -5,6 +5,7 @@
 	"excludeFolders": [
 		"brain",
 		"live",
+		"types-check",
 		".changeset",
 		".github",
 		"examples/vite/.cdn-cache",
