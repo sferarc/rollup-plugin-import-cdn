@@ -1,0 +1,24 @@
+{
+	"$schema": "https://context7.com/schema/context7.json",
+	"projectTitle": "rollup-plugin-import-cdn",
+	"description": "Rollup and Vite plugin that fetches bare package imports and URL imports from esm.sh, jsDelivr or Skypack at build time and bundles them like local code, with tree-shaking, version pinning, Subresource Integrity checks and an on-disk fetch cache.",
+	"excludeFolders": [
+		"brain",
+		"live",
+		".changeset",
+		".github",
+		"examples/vite/.cdn-cache",
+		"src/**/*.test.ts"
+	],
+	"excludeFiles": ["AGENTS.md", "CLAUDE.md"],
+	"rules": [
+		"The default priority is [\"esm.sh\"]. Before 0.5.0 it was [\"skypack\"]; set priority: [\"skypack\"] to keep the old order.",
+		"importCdn() is a Rollup 3 and 4 plugin and a Vite 8 plugin, for both vite build and vite dev; add it to plugins without a cast.",
+		"Under Vite a bare name installed in node_modules is used from there; only names Vite cannot resolve are fetched from the CDN.",
+		"Pin packages with versions, such as versions: { react: \"18.2.0\" }, for reproducible builds. A package pin also applies to its subpaths.",
+		"cache stores only URLs pinned to an exact major.minor.patch version. Unpinned imports are fetched again on every build.",
+		"integrity maps an absolute URL to an SRI hash such as sha384-<base64 digest>. It is not checked under vite dev, where the browser loads URL imports from the CDN.",
+		"With \"jsdelivr\" in priority, pin every package you import through it, or the bundle can hold two copies of a package.",
+		"A custom priority function receives the specifier and its pinned version and returns an absolute URL, or undefined to try the next entry."
+	]
+}
