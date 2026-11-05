@@ -130,3 +130,32 @@ jobs:
 
       - name: Typecheck the built types
         run: pnpm exec tsc -p types-check
+
+  # Runs the suite on Rollup's next major beta; not required, so an upstream regression never blocks a PR.
+  rollup-beta:
+    name: Test (Rollup beta)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: jdx/mise-action@6612f0ef07ed2a736cd1e00a94a065522dd41195 # v5.2.5
+
+      - name: Pin Rollup to the beta dist-tag
+        run: |
+          version="$(npm view rollup@beta version)"
+          echo "ROLLUP_BETA=$version" >> "$GITHUB_ENV"
+          sed -i "s/^  rollup: .*/  rollup: $version/" pnpm-workspace.yaml
+
+      - run: pnpm install --no-frozen-lockfile
+
+      - run: test "$(pnpm exec rollup --version)" = "rollup v$ROLLUP_BETA"
+
+      - name: Test
+        run: pnpm test
+
+      - name: Build
+        run: pnpm build
+
+      # pnpm typecheck fails on Rollup 5 in src/test-utils.ts (#189), so only a consumer of dist is checked.
+      - name: Typecheck the built types
+        run: pnpm exec tsc -p types-check
