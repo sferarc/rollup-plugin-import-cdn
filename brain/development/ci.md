@@ -1,6 +1,6 @@
 # CI
 
-`.github/workflows/ci.yml` runs on pushes to `main` and on every pull request. Three jobs, `Check`, `Test (minimum Node)` and `Test (Rollup 3.0)`, all on `ubuntu-latest`: the repository is public, so it uses GitHub-hosted runners (comment in the workflow).
+`.github/workflows/ci.yml` runs on pushes to `main` and on every pull request. Four jobs, `Check`, `Test (minimum Node)`, `Test (Rollup 3.0)` and `Test (Vite 8.1)`, all on `ubuntu-latest`: the repository is public, so it uses GitHub-hosted runners (comment in the workflow).
 
 ## Check steps
 
@@ -34,13 +34,21 @@ On 2026-10-23 a brain-maintenance shift ran all seven checks of `pnpm check` on 
 
 The suite passed on Rollup 3.0.0 apart from the `onLog` test, which `src/rollup.test.ts` skips below 3.25 (`it.skipIf` on `VERSION` from `rollup`). No change to the peer range was needed. Run it locally the same way: edit the catalog line, `pnpm install --no-frozen-lockfile`, `pnpm exec vitest run`, then `git checkout pnpm-workspace.yaml pnpm-lock.yaml`.
 
+## Vite 8.1 job
+
+`Test (Vite 8.1)` (#164) runs the suite on the lowest Vite the optional peer range accepts, the same way as the Rollup 3 job: `sed` rewrites the `vite` catalog line to 8.1.0, `pnpm install --no-frozen-lockfile`, a check that `vite --version` starts with `vite/8.1.0`, then `pnpm test`. vitest's own `vite` dependency dedupes to the pinned version, so vitest runs on it too.
+
+The range was `^8.0.0` (#157) and is now `^8.1.0`. On 2026-11-05, Vite 8.0.0 and 8.0.16 failed two tests in `src/vite.test.ts`: "names a CDN module in the sourcemap by the URL it was served from", where `sources` kept cwd-relative paths such as `../../<cwd>/pkg-a` and nothing was on the ignore list, so the `outputOptions` sourcemap hook had no effect ([[architecture/import-rewriting]]); and "rebuilds under vite build --watch", which saw no rebuild within 30 seconds. Whether the watch failure also happens on Linux, or only with macOS polling, is unknown. Vite 8.1.0, 8.2.0, 8.3.0 and 8.3.5 passed every test in that file and `src/examples.test.ts`, and 8.1.0 passed the whole suite.
+
+Locally on macOS, every `src/vite.test.ts` test fails on Vite 8.0.x and 8.1.x when the temp root sits under the default `TMPDIR`, a `/var/folders` path behind the `/var` to `/private/var` symlink: a plain `vite build` without the plugin fails there too (`vite:build-html` emits `../../private/var/...` as a file name), so it is a Vite bug, fixed by 8.2.0. Set `TMPDIR` to a path with no symlink, such as one under `/private/tmp`, to run the suite on 8.1.0 locally. `ubuntu-latest` has no such symlink.
+
 ## Live CDN
 
 `.github/workflows/live-cdn.yml` runs `pnpm test:live` ([[testing]], "Live check") on Mondays at 06:17 UTC and on `workflow_dispatch`, on `ubuntu-latest` (#115). It is a separate workflow, not a job in `ci.yml`, so a CDN outage never fails a pull request. When a scheduled run fails, the last steps mint a sferarc-hq App token with `issues: write` (from the org secrets `HQ_APP_ID` and `HQ_APP_PRIVATE_KEY`, as in `release.yml`) and open an issue titled "Live CDN check failed" labelled `product:rollup-plugin-import-cdn`, `bug`, `p2` and `ready`, or comment the run link on the one already open (#124). Lanes take only `ready` issues opened by SferaDev or the sferarc-hq or pgbeam-hq Apps, so the `github.token` issue it filed before, authored by `github-actions[bot]` and without `ready`, would never have been picked up. A manual run only shows its result in the Actions tab.
 
 ## Branch rules on `main`
 
-The `main-default` ruleset, read from the GitHub API on 2026-10-08: `Check` is the one required status check, changes go through pull requests with squash or rebase merges, history is linear, and force pushes and deletion are blocked. That reading predates `Test (minimum Node)` and `Test (Rollup 3.0)`; whether the ruleset now requires either is unknown until the ruleset is read again.
+The `main-default` ruleset, read from the GitHub API on 2026-10-08: `Check` is the one required status check, changes go through pull requests with squash or rebase merges, history is linear, and force pushes and deletion are blocked. That reading predates `Test (minimum Node)`, `Test (Rollup 3.0)` and `Test (Vite 8.1)`; whether the ruleset now requires either is unknown until the ruleset is read again.
 
 ## Related
 
