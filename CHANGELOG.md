@@ -1,5 +1,11 @@
 # rollup-plugin-import-cdn
 
+## 0.5.6
+
+### Patch Changes
+
+- f5fe472: Name Rolldown in the npm description and add the `rolldown` and `rolldown-plugin` keywords, so the Vite plugin registry and npm search list the plugin for Rolldown.
+
 ## 0.5.5
 
 ### Patch Changes
