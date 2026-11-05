@@ -277,6 +277,7 @@ export function importCdn(pluginOptions: ImportCdnOptions = {}): ImportCdnPlugin
 	const modulesByUrl = new Map<string, { id: string; main: string }>();
 	// A version bump leaves an `integrity` key naming the old URL, which then checks nothing.
 	const checkedIntegrity = new Set<string>();
+	const hintedIntegrity = new Set<string>();
 
 	const options = { ...pluginOptions, fetchImpl };
 
@@ -293,6 +294,7 @@ export function importCdn(pluginOptions: ImportCdnOptions = {}): ImportCdnPlugin
 			moduleUrls.clear();
 			modulesByUrl.clear();
 			checkedIntegrity.clear();
+			hintedIntegrity.clear();
 		},
 		buildEnd(error) {
 			// The dev server runs one build for its lifetime and loads modules on demand.
@@ -329,6 +331,7 @@ export function importCdn(pluginOptions: ImportCdnOptions = {}): ImportCdnPlugin
 				options,
 				contextLogger(this),
 				checkedIntegrity,
+				hintedIntegrity,
 			);
 			if (!dependency) return;
 			// Only an identical body is shared, so an integrity entry on either URL still covers it.
@@ -346,6 +349,7 @@ export function importCdn(pluginOptions: ImportCdnOptions = {}): ImportCdnPlugin
 				options,
 				contextLogger(this),
 				checkedIntegrity,
+				hintedIntegrity,
 			);
 			if (!dependency) return;
 			// A rebuild from Rollup's cache reuses resolved ids and skips resolveId, but not load.

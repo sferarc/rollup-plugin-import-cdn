@@ -1394,6 +1394,64 @@ describe("resolveDependency integrity", () => {
 		expect(dependency?.main).toBe(body);
 	});
 
+	it("should log the value to pin a module without an entry for its requested and final URL", async () => {
+		const logger = spyLogger();
+
+		await resolveDependency(pinned, { fetchImpl: servingFetch([]), integrity: {} }, logger);
+
+		expect(logger.debug.mock.calls).toEqual([
+			[`No integrity entry for ${pinned}: ${sri(body)}`],
+			[`No integrity entry for ${final}: ${sri(body)}`],
+		]);
+	});
+
+	it("should log one line when the URL is not redirected", async () => {
+		const logger = spyLogger();
+
+		await resolveDependency(final, { fetchImpl: servingFetch([]), integrity: {} }, logger);
+
+		expect(logger.debug).toHaveBeenCalledExactlyOnceWith(
+			`No integrity entry for ${final}: ${sri(body)}`,
+		);
+	});
+
+	it("should log a value that passes the check when used as the entry", async () => {
+		const logger = spyLogger();
+		await resolveDependency(pinned, { fetchImpl: servingFetch([]), integrity: {} }, logger);
+		const [message] = logger.debug.mock.calls[0]!;
+		const value = message.slice(message.lastIndexOf(" ") + 1);
+
+		const dependency = await resolveDependency(pinned, {
+			fetchImpl: servingFetch([]),
+			integrity: { [pinned]: value },
+		});
+
+		expect(dependency?.main).toBe(body);
+	});
+
+	it.each([
+		["the module is checked against an entry", { [final]: sri(body) }],
+		["integrity is not set", undefined],
+	])("should log nothing when %s", async (_, integrity) => {
+		const logger = spyLogger();
+
+		await resolveDependency(pinned, { fetchImpl: servingFetch([]), integrity }, logger);
+
+		expect(logger.debug).not.toHaveBeenCalled();
+	});
+
+	it("should log a URL once across calls that share the hinted set", async () => {
+		const logger = spyLogger();
+		const hinted = new Set<string>();
+		const options: PluginOptions = { fetchImpl: servingFetch([]), integrity: {} };
+
+		await resolveDependency(pinned, options, logger, undefined, hinted);
+		await resolveDependency(pinned, options, logger, undefined, hinted);
+
+		expect(logger.debug).toHaveBeenCalledTimes(2);
+		expect([...hinted]).toEqual([pinned, final]);
+	});
+
 	describe("with a cache", () => {
 		let cache: string;
 
@@ -1449,6 +1507,48 @@ describe("resolveDependency integrity", () => {
 
 			expect(dependency?.url).toBe(final);
 			expect(calls).toEqual([pinned, pinned]);
+		});
+
+		it("should log the value to pin a module read from the cache without an entry", async () => {
+			const options: PluginOptions = { cache, fetchImpl: servingFetch([]) };
+			await resolveDependency(pinned, options);
+			const logger = spyLogger();
+
+			await resolveDependency(
+				pinned,
+				{ ...options, fetchImpl: servingFetch([], "unused"), integrity: {} },
+				logger,
+			);
+
+			expect(logger.debug.mock.calls).toEqual([
+				[`No integrity entry for ${pinned}: ${sri(body)}`],
+				[`No integrity entry for ${final}: ${sri(body)}`],
+			]);
+		});
+
+		it("should keep serving a redirected module from the cache with both logged entries", async () => {
+			const calls: string[] = [];
+			const logger = spyLogger();
+			await resolveDependency(
+				pinned,
+				{ cache, fetchImpl: servingFetch(calls), integrity: {} },
+				logger,
+			);
+			const integrity = Object.fromEntries(
+				logger.debug.mock.calls.map(([message]) => message.split(" ").slice(-2)),
+			);
+			const options: PluginOptions = {
+				cache,
+				fetchImpl: servingFetch(calls),
+				integrity: { [pinned]: integrity[`${pinned}:`]!, [final]: integrity[`${final}:`]! },
+			};
+			const checked = new Set<string>();
+
+			const dependency = await resolveDependency(pinned, options, undefined, checked);
+
+			expect(dependency?.main).toBe(body);
+			expect([...checked]).toEqual([pinned, final]);
+			expect(calls).toEqual([pinned]);
 		});
 
 		it.each([

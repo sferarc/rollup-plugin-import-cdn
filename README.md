@@ -112,6 +112,8 @@ Compute a hash from the exact URL the plugin fetches:
 curl -sL https://esm.sh/lodash@4.17.21 | openssl dgst -sha384 -binary | openssl base64 -A
 ```
 
+To collect the values for a whole module graph, including the files an entry module imports, set `integrity: {}` and build once with `logLevel: "debug"`. For each module without an entry the plugin logs `No integrity entry for <url>: sha384-<digest>`, once for the requested URL and once for the URL it redirected to, if any, ready to copy into `integrity`. Nothing is logged for a module checked against an entry, or when `integrity` is not set.
+
 The hash covers the module text as `fetchImpl`'s `text()` returns it, encoded as UTF-8. For a UTF-8 module without a byte order mark that is the file as served, so the command above gives the right value.
 
 Entries from the [fetch cache](#fetch-cache) are checked too, so a modified cache file fails the build instead of being bundled. A cache file also records the URL the module was served from, which relative imports inside it resolve against. For a requested URL with an entry, that recorded URL is only trusted when it equals the requested URL or has an entry of its own; otherwise the module is fetched again. So when the requested URL redirects, list the final URL as well to keep it cached. A cache file can name any final URL, so with `cache` set, key entries by the requested URL: an entry keyed only by the final URL is checked on every fetch but not on a cache read.

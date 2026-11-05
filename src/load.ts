@@ -6,7 +6,7 @@ import path from "node:path";
 // records with renamed fields, so `s` and `e` read as undefined there and every import was
 // replaced with the whole module source.
 import { init, parse } from "es-module-lexer/minimal";
-import { hasIntegrity, verifyIntegrity } from "./integrity";
+import { hasIntegrity, integrityOf, verifyIntegrity } from "./integrity";
 import type { AvailableCDNs, Dependency, PluginOptions } from "./types";
 
 // The plugin wires these to Rollup's `this.warn` and `this.debug`; omitted, messages are dropped.
@@ -203,12 +203,13 @@ function formatAttempts(name: string, attempts: { url: string; reason: string }[
 		.join("\n");
 }
 
-// `checked` collects the URLs whose `integrity` entries a returned module was verified against.
+// `checked` collects the URLs a returned module was verified against, `hinted` those logged without an entry.
 export async function resolveDependency(
 	name: string,
 	options: PluginOptions,
 	logger: Logger = silent,
 	checked?: Set<string>,
+	hinted?: Set<string>,
 ): Promise<Dependency | null> {
 	const urls = resolveDependencyUrls(name, options);
 	if (urls.length === 0) return null;
@@ -218,7 +219,16 @@ export async function resolveDependency(
 	let sawHttpError = false;
 	let lastError: unknown;
 	const verify = (urls: string[], main: string) => {
-		for (const url of verifyIntegrity(urls, main, integrity)) checked?.add(url);
+		const matched = verifyIntegrity(urls, main, integrity);
+		for (const url of matched) checked?.add(url);
+		// The final URL is named too, since a cached redirect is only trusted when both have entries.
+		if (!integrity || matched.length > 0) return;
+		const value = integrityOf(main);
+		for (const url of new Set(urls)) {
+			if (hinted?.has(url)) continue;
+			hinted?.add(url);
+			logger.debug(`No integrity entry for ${url}: ${value}`);
+		}
 	};
 	const fail = (url: string, reason: string) => {
 		attempts.push({ url, reason });
