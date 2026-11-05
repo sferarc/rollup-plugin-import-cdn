@@ -4,6 +4,8 @@ Knowledge vault for rollup-plugin-import-cdn, readable as an Obsidian vault. One
 
 The README is the user documentation and stays the authority on the public API. These notes are for someone changing the code.
 
+The repository rules for coding agents live in `AGENTS.md`, the cross-tool file that Codex, Cursor, Copilot and others read; `CLAUDE.md` is a one line `@AGENTS.md` import so Claude Code reads the same file (#156).
+
 ## Architecture
 
 - [[architecture/index]]: the three Rollup hooks, how a specifier becomes a CDN URL, and how fetched code is rewritten
