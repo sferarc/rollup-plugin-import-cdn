@@ -271,6 +271,48 @@ describe("live Skypack served version", () => {
 	});
 });
 
+// The README's Fetch Cache section says the pinned URL in Skypack's banner is cached.
+describe("live Skypack pinned URL", () => {
+	let dir: string;
+
+	beforeEach(async () => {
+		dir = await mkdtemp(path.join(tmpdir(), "import-cdn-live-"));
+	});
+
+	afterEach(async () => {
+		await rm(dir, { recursive: true, force: true });
+	});
+
+	it("bundles the banner's /pin/ URL, then rebuilds from the cache offline", async () => {
+		const banner = await (await fetch(`https://cdn.skypack.dev/lodash@${LODASH}`)).text();
+		const pinned = /Normal: (https:\/\/cdn\.skypack\.dev\/pin\/lodash@v4\.17\.21-\S+)/.exec(
+			banner,
+		)?.[1];
+		if (!pinned) throw new Error(`No pinned URL in Skypack's banner:\n${banner}`);
+		const entry = path.join(dir, "index.js");
+		await writeFile(entry, `import _ from "${pinned}";\nconsole.log(_.chunk);`);
+		const options = { priority: ["skypack" as const], cache: path.join(dir, "cache") };
+
+		const online = await build({ input: entry, plugins: [importCdn(options)] });
+		// The /pin/ stub only re-exports, so the chunk lists just the /-/ module it points at.
+		expect(Object.keys(online.modules)).toContainEqual(
+			expect.stringMatching(/^https:\/\/cdn\.skypack\.dev\/-\/lodash@v4\.17\.21-/),
+		);
+
+		const requested: string[] = [];
+		const offline: FetchImpl = async (url) => {
+			requested.push(url);
+			throw new Error(`Not cached: ${url}`);
+		};
+		const cached = await build({
+			input: entry,
+			plugins: [importCdn({ ...options, fetchImpl: offline })],
+		});
+		expect(requested).toEqual([]);
+		expect(cached.code).toBe(online.code);
+	});
+});
+
 // Both CDNs answer HTTP 200 for a package they cannot build, with a module that throws when run.
 // A side-effect import bundles that module without complaint unless the plugin rejects it.
 describe("live CDN build errors", () => {
