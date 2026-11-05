@@ -1,5 +1,12 @@
 # rollup-plugin-import-cdn
 
+## 0.5.5
+
+### Patch Changes
+
+- aa2785b: Support standalone Rolldown. Rolldown never calls `resolveImportMeta`, so `import.meta.url` inside a CDN module named the output chunk instead of the CDN URL; the plugin now inlines the served URL there, as it already did under Vite 8. `package.json` declares Rolldown `^1.2.16` in `compatiblePackages` for the Vite plugin registry.
+- 7b1c44d: Raise the optional Vite peer range to `^8.1.0`. On Vite 8.0.x a `sourcemap: true` build does not name CDN modules by their served URL or put them on the ignore list, and the `vite build --watch` test saw no rebuild within 30 seconds.
+
 ## 0.5.4
 
 ### Patch Changes
