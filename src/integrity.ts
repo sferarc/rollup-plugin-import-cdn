@@ -38,6 +38,8 @@ const strength = (algorithm: Algorithm) => Object.keys(algorithms).indexOf(algor
 const digestOf = (algorithm: Algorithm, body: string) =>
 	createHash(algorithm).update(body).digest("base64");
 
+export const integrityOf = (body: string) => `sha384-${digestOf("sha384", body)}`;
+
 export const hasIntegrity = (url: string, integrity: Record<string, string> | undefined) =>
 	integrity !== undefined && Object.keys(integrity).includes(url);
 

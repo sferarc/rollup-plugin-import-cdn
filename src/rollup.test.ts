@@ -886,6 +886,34 @@ describe("Rollup build", () => {
 		expect(code).toContain('"PKG_B"');
 	});
 
+	it.skipIf(!hasOnLog)(
+		"logs at debug level an integrity map that a later build passes with",
+		async () => {
+			const { fetchImpl } = mockCdn();
+			const messages: string[] = [];
+			const bundle = await rollup({
+				input: entry,
+				logLevel: "debug",
+				onLog: (level, log) => {
+					if (level === "warn") expect.fail(log.message);
+					if (level === "debug" && log.plugin === "plugin-import-cdn") messages.push(log.message);
+				},
+				plugins: [skypackCdn({ fetchImpl, integrity: {} })],
+			});
+			await bundle.close();
+			const hints = messages.map((message) => /No integrity entry for (\S+): (\S+)$/.exec(message));
+			const integrity = Object.fromEntries(hints.map((hint) => [hint?.[1], hint?.[2]]));
+
+			// resolveId and load both see each module, but each URL is logged once.
+			expect(messages).toHaveLength(6);
+			expect(Object.keys(integrity).sort()).toEqual(
+				[DIRECT, HELPER, PKG_A, PKG_A_REDIRECT, PKG_B, SHARED].sort(),
+			);
+			const code = await build({ input: entry, plugins: [skypackCdn({ fetchImpl, integrity })] });
+			expect(code).toContain('"HELPER"');
+		},
+	);
+
 	it("fails the build when a URL's body does not match its integrity entry", async () => {
 		const { fetchImpl } = mockCdn();
 		await writeFile(entry, `import { direct } from "${DIRECT}";\nconsole.log(direct);`);
