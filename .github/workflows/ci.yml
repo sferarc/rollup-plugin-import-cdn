@@ -124,3 +124,9 @@ jobs:
 
       - name: Test
         run: pnpm test
+
+      - name: Build
+        run: pnpm build
+
+      - name: Typecheck the built types
+        run: pnpm exec tsc -p types-check

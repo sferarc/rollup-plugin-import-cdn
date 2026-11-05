@@ -1,4 +1,4 @@
-// tsconfig.json here resolves the package to dist, so CI checks the published types on Rollup 3.0.
+// tsconfig.json here resolves the package to dist, so CI checks the published types on the peer range floors.
 import type { InputOptions, Plugin } from "rollup";
 import { importCdn } from "rollup-plugin-import-cdn";
 
