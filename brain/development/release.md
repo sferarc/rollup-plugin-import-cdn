@@ -10,6 +10,10 @@ Releases use changesets (`.changeset/config.json`, `.changeset/README.md`), and 
 
 The action uses a `sferarc-hq` App token rather than `github.token`, because a version pull request merged by the Actions bot would push to `main` without triggering the workflow, and nothing would publish (comment in `release.yml`). The first step mints it with `actions/create-github-app-token` from the org secrets `HQ_APP_ID` and `HQ_APP_PRIVATE_KEY`, scoped to this repository with `contents` and `pull-requests` write, so version commits and the version pull request are authored by `sferarc-hq[bot]`. An App token, unlike `github.token`, still triggers `pull_request` workflows, so the version pull request gets the required `Check` job.
 
+## Main only
+
+The job runs only on `main`: `release.yml` guards it with `github.ref == 'refs/heads/main'` beside `RELEASE_ENABLED`, so a `workflow_dispatch` from another branch publishes nothing (#167, sferarc/hq#912). That guard is the only control in place. The job also names the `release` environment, which GitHub creates on the first run with no deployment branch policy; on 2026-11-05 `gh api repos/sferarc/rollup-plugin-import-cdn/environments` listed none. The main-only branch policy is pending: the sferarc-hq App gets a 403 creating the environment without Administration write, which waits on sferarc/hq#888. Binding the npm trusted publisher to the environment is the owner step tracked from sferarc/hq#912; until then the publisher names no environment, and whether npm accepts a token from a job in an environment the publisher does not name is unknown until the next publish (docs.npmjs.com lists the field as optional).
+
 ## Enabled by the owner
 
 The `release` job only runs when the repository variable `RELEASE_ENABLED` is `true`, and only the owner sets it. Push runs of `release.yml` up to 883691a were skipped; the owner's `workflow_dispatch` on 883691a at 06:39 UTC on 2026-11-01 ran the job (run 41281716355), so the variable has been `true` since then. See [[decisions/2026-10-08-release-off-until-enabled]].
