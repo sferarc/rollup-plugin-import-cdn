@@ -97,3 +97,23 @@ jobs:
 
       - name: Test
         run: pnpm test
+
+  # Runs the suite on the lowest Vite the optional peer range accepts.
+  vite-8-1:
+    name: Test (Vite 8.1)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: jdx/mise-action@6612f0ef07ed2a736cd1e00a94a065522dd41195 # v5.2.5
+
+      - name: Pin Vite to the peer range floor
+        run: |
+          sed -i 's/^  vite: .*/  vite: 8.1.0/' pnpm-workspace.yaml
+
+      - run: pnpm install --no-frozen-lockfile
+
+      - run: test "$(pnpm exec vite --version | cut -d' ' -f1)" = "vite/8.1.0"
+
+      - name: Test
+        run: pnpm test
