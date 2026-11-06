@@ -1,5 +1,11 @@
 # rollup-plugin-import-cdn
 
+## 0.5.9
+
+### Patch Changes
+
+- 82b3f02: Ship CommonJS type declarations for the `require` condition, so a CommonJS TypeScript consumer under `node16` module resolution no longer fails with TS1479.
+
 ## 0.5.8
 
 ### Patch Changes
