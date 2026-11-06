@@ -91,6 +91,7 @@
 	"devDependencies": {
 		"@biomejs/biome": "catalog:",
 		"@changesets/cli": "catalog:",
+		"@rollup/plugin-json": "catalog:",
 		"@types/node": "catalog:",
 		"@typescript/typescript6": "catalog:",
 		"bunchee": "catalog:",

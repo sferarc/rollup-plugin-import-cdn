@@ -15,6 +15,14 @@ const PKG_B_PINNED = "https://cdn.skypack.dev/pkg-b@2.0.0";
 const DIRECT = "https://esm.test/direct.js";
 const META = "https://esm.test/meta.js";
 const LAZY = "https://esm.test/lazy.js";
+// esm.sh redirects an unpinned package file to its version and serves package.json as raw JSON (curl, 2026-11-06).
+const JSON_REQUEST = "https://esm.sh/lib/package.json";
+const JSON_SERVED = "https://esm.sh/lib@1.0.0/package.json";
+const JSON_BODY = JSON.stringify(
+	{ name: "lib", version: "1.0.0", description: "UNUSED_FIELD" },
+	null,
+	2,
+);
 
 const cdn: Record<string, { url?: string; body: string }> = {
 	[PKG_A]: {
@@ -134,6 +142,23 @@ describe("Rolldown build", () => {
 
 		expect(out).toContain('"PKG_B_2"');
 		expect(out).not.toContain('"PKG_B"');
+	});
+
+	it("bundles a package's JSON file from esm.sh as a json module", async () => {
+		const fetchImpl = vi.fn<FetchImpl>(async (url) => ({
+			ok: url === JSON_REQUEST,
+			status: url === JSON_REQUEST ? 200 : 404,
+			url: url === JSON_REQUEST ? JSON_SERVED : url,
+			text: async () => (url === JSON_REQUEST ? JSON_BODY : "Not found"),
+		}));
+
+		const out = await code('import { version } from "lib/package.json";\nconsole.log(version);', [
+			importCdn({ fetchImpl }),
+		]);
+
+		expect(out).toContain('"1.0.0"');
+		expect(out).not.toContain("UNUSED_FIELD");
+		expect(fetchImpl.mock.calls.map(([url]) => url)).toEqual([JSON_REQUEST]);
 	});
 
 	it("points import.meta.url in a CDN module at the URL it was served from", async () => {

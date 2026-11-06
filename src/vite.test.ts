@@ -13,6 +13,14 @@ const HELPER = "https://cdn.skypack.dev/-/pkg-a@1.0.0/dist/helper.js";
 const PKG_B = "https://cdn.skypack.dev/pkg-b";
 const DIRECT = "https://esm.test/direct.js";
 const META = "https://esm.test/meta.js";
+// esm.sh redirects an unpinned package file to its version and serves package.json as raw JSON (curl, 2026-11-06).
+const JSON_REQUEST = "https://esm.sh/lib/package.json";
+const JSON_SERVED = "https://esm.sh/lib@1.0.0/package.json";
+const JSON_BODY = JSON.stringify(
+	{ name: "lib", version: "1.0.0", description: "UNUSED_FIELD" },
+	null,
+	2,
+);
 
 const cdn: Record<string, { url?: string; body: string }> = {
 	[PKG_A]: {
@@ -272,6 +280,24 @@ describe("Vite build", () => {
 		expect(css).toContain('@import "https://esm.test/lib@1.0.0/dist/base.css"');
 		expect(css).toContain('url("https://esm.test/lib@1.0.0/dist/fonts/a.woff2")');
 		expect(fetchImpl.mock.calls.map(([url]) => url)).toEqual([STYLE]);
+	});
+
+	it("bundles a package's JSON file from esm.sh through Vite's JSON support", async () => {
+		const fetchImpl = vi.fn<FetchImpl>(async (url) => ({
+			ok: url === JSON_REQUEST,
+			status: url === JSON_REQUEST ? 200 : 404,
+			url: url === JSON_REQUEST ? JSON_SERVED : url,
+			text: async () => (url === JSON_REQUEST ? JSON_BODY : "Not found"),
+		}));
+
+		const code = await viteBuild(
+			'import { version } from "lib/package.json";\nconsole.log(version);',
+			[importCdn({ fetchImpl })],
+		);
+
+		expect(code).toContain('"1.0.0"');
+		expect(code).not.toContain("UNUSED_FIELD");
+		expect(fetchImpl.mock.calls.map(([url]) => url)).toEqual([JSON_REQUEST]);
 	});
 });
 

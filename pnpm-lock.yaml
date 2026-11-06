@@ -170,6 +170,9 @@ catalogs:
     '@changesets/cli':
       specifier: 3.0.3
       version: 3.0.3
+    '@rollup/plugin-json':
+      specifier: 6.1.0
+      version: 6.1.0
     '@types/node':
       specifier: 26.6.6
       version: 26.6.6
@@ -226,6 +229,9 @@ importers:
       '@changesets/cli':
         specifier: 'catalog:'
         version: 3.0.3
+      '@rollup/plugin-json':
+        specifier: 'catalog:'
+        version: 6.1.0(rollup@4.67.4)
       '@types/node':
         specifier: 'catalog:'
         version: 26.6.6
