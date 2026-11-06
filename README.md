@@ -164,6 +164,8 @@ Under `vite dev`, a fetched package is served by the dev server at `/@id/<name>`
 
 `importCdn()` works as a Rolldown plugin as well, tested with Rolldown 1.2.16 and later: pass it in `plugins` as with Rollup. Rolldown does not call Rollup's `resolveImportMeta` hook, so the plugin writes the served URL in place of `import.meta.url` inside CDN modules itself, as under Vite.
 
+[`examples/rolldown`](examples/rolldown) is a runnable Rolldown build that imports `lodash-es` by bare name and by esm.sh URL, with pinned versions and a committed `cache`, so it builds offline.
+
 ## TypeScript
 
 `tsc` checks your sources before the bundler runs, and it cannot see what the plugin fetches, so a CDN import fails with `TS2307: Cannot find module` until you give it types.
