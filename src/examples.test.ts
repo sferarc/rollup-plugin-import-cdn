@@ -1,4 +1,5 @@
 import { fileURLToPath } from "node:url";
+import { type RolldownOptions, rolldown } from "rolldown";
 import { type RollupOptions, rollup } from "rollup";
 import { build } from "vite";
 import { describe, expect, it, vi } from "vitest";
@@ -74,6 +75,42 @@ describe("examples/rollup", () => {
 			expect.arrayContaining([
 				"https://esm.sh/lodash-es@4.17.21/es2022/chunk.mjs",
 				"https://esm.sh/lodash-es@4.17.21/es2022/kebabCase.mjs",
+			]),
+		);
+		expect(globalFetch).not.toHaveBeenCalled();
+	});
+});
+
+describe("examples/rolldown", () => {
+	it("builds from its committed cache with no request", async () => {
+		const globalFetch = vi
+			.spyOn(globalThis, "fetch")
+			.mockRejectedValue(new Error("examples/rolldown must build from its committed .cdn-cache"));
+		const configUrl = new URL("../examples/rolldown/rolldown.config.mjs", import.meta.url).href;
+		const { default: config }: { default: RolldownOptions } = await import(configUrl);
+		const { output: _, ...input } = config;
+
+		const warnings: string[] = [];
+		const bundle = await rolldown({
+			...input,
+			onwarn: (warning) => warnings.push(warning.message),
+		});
+		const { output } = await bundle.generate({ format: "es" });
+		await bundle.close();
+
+		expect(warnings).toEqual([]);
+		const chunks = output.filter((file) => file.type === "chunk");
+		expect(chunks).toHaveLength(1);
+		const [chunk] = chunks;
+		if (!chunk) throw new Error("Expected one chunk");
+		expect(chunk.imports).toEqual([]);
+		expect(chunk.dynamicImports).toEqual([]);
+		expect(chunk.code).not.toMatch(/\b(?:from|import)\s*\(?\s*["']https?:/);
+		expect(chunk.code).toContain("rolldown import CDN");
+		expect(chunk.moduleIds).toEqual(
+			expect.arrayContaining([
+				"https://esm.sh/lodash-es@4.17.21/es2022/capitalize.mjs",
+				"https://esm.sh/lodash-es@4.17.21/es2022/uniq.mjs",
 			]),
 		);
 		expect(globalFetch).not.toHaveBeenCalled();
