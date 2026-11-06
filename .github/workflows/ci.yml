@@ -146,13 +146,19 @@ jobs:
 
       - name: Pin Rolldown to the compatiblePackages floor
         run: |
-          version="$(jq -r '.compatiblePackages.rolldown.versions' package.json | sed 's/^\^//')"
+          range="$(jq -r '.compatiblePackages.rolldown.versions' package.json)"
+          if [[ ! "$range" =~ ^\^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::compatiblePackages.rolldown.versions must be a single ^x.y.z range to pin, got '$range'"
+            exit 1
+          fi
+          version="${range#^}"
           echo "ROLLDOWN_FLOOR=$version" >> "$GITHUB_ENV"
           sed -i "s/^  rolldown: .*/  rolldown: $version/" pnpm-workspace.yaml
 
       - run: pnpm install --no-frozen-lockfile
 
-      - run: test "$(pnpm exec rolldown --version)" = "rolldown v$ROLLDOWN_FLOOR"
+      # Not `rolldown --version`: its consola logger prints `[log] rolldown v...` when CI is set.
+      - run: test "$(jq -r .version node_modules/rolldown/package.json)" = "$ROLLDOWN_FLOOR"
 
       - name: Test
         run: pnpm test
