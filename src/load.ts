@@ -204,7 +204,8 @@ function formatAttempts(name: string, attempts: { url: string; reason: string }[
 }
 
 // `checked` collects the URLs a returned module was verified against, `hinted` those logged without
-// an entry, `reusable` the pinned URLs whose fetched response was returned.
+// an entry, `reusable` the pinned URLs whose fetched response was returned, `uncached` the unpinned
+// URLs logged as skipped by `cache`.
 export async function resolveDependency(
 	name: string,
 	options: PluginOptions,
@@ -212,6 +213,7 @@ export async function resolveDependency(
 	checked?: Set<string>,
 	hinted?: Set<string>,
 	reusable?: Set<string>,
+	uncached?: Set<string>,
 ): Promise<Dependency | null> {
 	const urls = resolveDependencyUrls(name, options);
 	if (urls.length === 0) return null;
@@ -303,6 +305,12 @@ export async function resolveDependency(
 		// Outside the try: a mismatch means tampered content, so it fails rather than trying the next CDN.
 		verify([cdnUrl, fetched.url], fetched.main);
 		if (cacheable) await writeCache(cache, cdnUrl, fetched, logger);
+		if (cache !== undefined && !cacheable && !uncached?.has(cdnUrl)) {
+			uncached?.add(cdnUrl);
+			logger.debug(
+				`Not caching ${cdnUrl}: it is not pinned to an exact version, so every build fetches it`,
+			);
+		}
 		if (isPinnedUrl(cdnUrl)) reusable?.add(cdnUrl);
 
 		return { name, ...fetched };
