@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import json from "@rollup/plugin-json";
 import {
 	type LogLevel,
 	type Plugin,
@@ -825,6 +826,27 @@ describe("Rollup build", () => {
 			expect(code).toContain(marker);
 		}
 		expect(code).not.toMatch(/\b(?:import|export)\b|https?:\/\//);
+	});
+
+	it("bundles a package's JSON file from esm.sh through @rollup/plugin-json", async () => {
+		// esm.sh serves a package file such as package.json as raw JSON (curl, 2026-11-06).
+		const { fetchImpl, fetchCounts } = mockCdn({
+			"https://esm.sh/lib/package.json": {
+				url: "https://esm.sh/lib@1.0.0/package.json",
+				body: JSON.stringify(
+					{ name: "lib", version: "1.0.0", description: "UNUSED_FIELD" },
+					null,
+					2,
+				),
+			},
+		});
+		await writeFile(entry, 'import { version } from "lib/package.json";\nconsole.log(version);');
+
+		const code = await build({ input: entry, plugins: [importCdn({ fetchImpl }), json()] });
+
+		expect(code).toContain('"1.0.0"');
+		expect(code).not.toContain("UNUSED_FIELD");
+		expect(fetchCounts()).toEqual({ "https://esm.sh/lib/package.json": 1 });
 	});
 
 	const integrityFor = (body: string) => ({
