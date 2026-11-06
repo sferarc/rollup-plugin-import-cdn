@@ -241,6 +241,38 @@ describe("Vite build", () => {
 			await watcher.close();
 		}
 	});
+
+	it("points relative url() and @import references in a CDN stylesheet at the CDN", async () => {
+		const STYLE = "https://esm.test/lib@1.0.0/dist/style.css";
+		const fetchImpl = vi.fn<FetchImpl>(async (url) => ({
+			ok: url === STYLE,
+			status: url === STYLE ? 200 : 404,
+			url,
+			text: async () =>
+				url === STYLE
+					? '@import "./base.css";\n.a { background: url(fonts/a.woff2); width: calc(100% / 3); }'
+					: "Not found",
+		}));
+		await writeFile(path.join(root, "main.js"), `import "${STYLE}";\nconsole.log("MAIN");`);
+
+		const result = await build({
+			root,
+			configFile: false,
+			logLevel: "silent",
+			build: { write: false, minify: false },
+			plugins: [cdnPlugin(fetchImpl)],
+		});
+		const css = (Array.isArray(result) ? result : [result])
+			.flatMap((output) => ("output" in output ? output.output : []))
+			.flatMap((file) => (file.type === "asset" && file.fileName.endsWith(".css") ? [file] : []))
+			.map((file) => String(file.source))
+			.join("\n");
+
+		// Before #219 the relative @import failed the build with ENOENT and url() resolved against the app.
+		expect(css).toContain('@import "https://esm.test/lib@1.0.0/dist/base.css"');
+		expect(css).toContain('url("https://esm.test/lib@1.0.0/dist/fonts/a.woff2")');
+		expect(fetchImpl.mock.calls.map(([url]) => url)).toEqual([STYLE]);
+	});
 });
 
 describe("Vite dev server", () => {

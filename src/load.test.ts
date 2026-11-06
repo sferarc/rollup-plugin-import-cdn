@@ -1056,6 +1056,62 @@ export const combined = a + b;`;
 		);
 		expect((error as Error).message).not.toContain("HTML");
 	});
+
+	it("should resolve relative url() and @import references in a stylesheet against its URL", async () => {
+		const url = "https://esm.test/katex@0.16.11/dist/katex.min.css";
+		const main = [
+			'@import "./base.css";',
+			"@import 'theme/dark.css' screen;",
+			"@import url(../reset.css);",
+			"@import 'https://other.test/x.css';",
+			"@import\"./min.css\";@import'min/print.css'print;",
+			"/* url(./in-comment.png) */",
+			".a { background: url( ./img.png ) no-repeat; }",
+			".b { src: url(fonts/KaTeX_Main-Regular.woff2) format('woff2'), url('/root.woff') }",
+			'.c { background: URL("//host.test/p.png?a=1#f"); }',
+			'.d { content: "url(./in-string.png)"; mask: url(#shape); }',
+			".e { background: url(data:image/png;base64,AAAA); cursor: url(https://abs.test/c.cur); }",
+			".f { background: url(); filter: url(./with\\(paren.svg); }",
+		].join("\n");
+
+		const result = await rewriteImports({ name: url, url, main });
+
+		expect(result).toBe(
+			[
+				'@import "https://esm.test/katex@0.16.11/dist/base.css";',
+				'@import "https://esm.test/katex@0.16.11/dist/theme/dark.css" screen;',
+				'@import url("https://esm.test/katex@0.16.11/reset.css");',
+				"@import 'https://other.test/x.css';",
+				'@import"https://esm.test/katex@0.16.11/dist/min.css";@import"https://esm.test/katex@0.16.11/dist/min/print.css"print;',
+				"/* url(./in-comment.png) */",
+				'.a { background: url( "https://esm.test/katex@0.16.11/dist/img.png" ) no-repeat; }',
+				'.b { src: url("https://esm.test/katex@0.16.11/dist/fonts/KaTeX_Main-Regular.woff2") format(\'woff2\'), url("https://esm.test/root.woff") }',
+				'.c { background: URL("https://host.test/p.png?a=1#f"); }',
+				'.d { content: "url(./in-string.png)"; mask: url(#shape); }',
+				".e { background: url(data:image/png;base64,AAAA); cursor: url(https://abs.test/c.cur); }",
+				".f { background: url(); filter: url(./with\\(paren.svg); }",
+			].join("\n"),
+		);
+	});
+
+	it("should treat a module as a stylesheet by its served URL rather than the lexer", async () => {
+		const options: PluginOptions = {
+			fetchImpl: createMockFetch({
+				// The JavaScript lexer reads `/ 3); }` as an unterminated regular expression.
+				"https://esm.test/odd.css?v=1": ".a { width: calc(100% / 3); }",
+			}),
+		};
+
+		expect(await loadHook("https://esm.test/odd.css?v=1", options)).toBe(
+			".a { width: calc(100% / 3); }",
+		);
+		const asScript = {
+			name: "odd",
+			url: "https://esm.test/odd.js",
+			main: ".a { width: calc(100% / 3); }",
+		};
+		await expect(rewriteImports(asScript)).rejects.toThrow(/Could not parse odd/);
+	});
 });
 
 describe("resolveDependency cache", () => {
