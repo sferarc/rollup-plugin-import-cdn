@@ -1,4 +1,4 @@
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { type Plugin, rolldown } from "rolldown";
@@ -95,6 +95,26 @@ describe("Rolldown build", () => {
 		for (const marker of ['"HELPER"', '"PKG_B"', '"DIRECT"']) expect(out).toContain(marker);
 		expect(out).not.toContain("UNUSED_EXPORT");
 		expect(out).not.toMatch(/\bfrom\s*["']https?:/);
+	});
+
+	it("leaves an installed package to Rolldown's resolver", async () => {
+		const pkg = path.join(root, "node_modules", "local-pkg");
+		await mkdir(pkg, { recursive: true });
+		await writeFile(
+			path.join(pkg, "package.json"),
+			JSON.stringify({ name: "local-pkg", type: "module", main: "index.js" }),
+		);
+		await writeFile(path.join(pkg, "index.js"), 'export const local = "LOCAL_PKG";');
+		const fetchImpl = mockCdn();
+
+		const out = await code(
+			'import { local } from "local-pkg";\nimport { b } from "pkg-b";\nconsole.log(local, b);',
+			[cdnPlugin(fetchImpl)],
+		);
+
+		expect(out).toContain('"LOCAL_PKG"');
+		expect(out).toContain('"PKG_B"');
+		expect(fetchImpl.mock.calls.map(([url]) => url)).toEqual([PKG_B]);
 	});
 
 	it("splits a dynamic import relative to a CDN module into its own chunk", async () => {

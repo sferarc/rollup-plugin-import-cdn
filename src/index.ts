@@ -320,8 +320,8 @@ export function importCdn(pluginOptions: ImportCdnOptions = {}): ImportCdnPlugin
 			} else if (importer === undefined && !isHttpUrl(key) && isLocalEntry(key)) {
 				// An entry such as `input: "src/index.js"` is a path relative to cwd, not a package.
 				return;
-			} else if (isVite && !isHttpUrl(key)) {
-				// Running before Vite's resolver, so installed packages and Vite's own ids still win.
+			} else if ((isVite || isRolldown) && !isHttpUrl(key)) {
+				// Vite's and Rolldown's resolvers run after every plugin, so installed packages and Vite's own ids still win.
 				const resolved = await this.resolve(key, importer, { ...resolveOptions, skipSelf: true });
 				if (resolved) return resolved;
 			}
