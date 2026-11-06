@@ -18,7 +18,7 @@ It is for builds that take packages from a CDN instead of `node_modules`: source
 
 - **Offline or network-free builds without `cache`.** Every build fetches every CDN module again unless `cache` is set, and only URLs pinned to an exact version are cached. Unpinned imports always hit the network.
 - **Relying on `integrity` in `vite dev`.** Under the dev server, URL imports and the absolute URLs written into CDN modules are loaded by the browser straight from the CDN, so `integrity` does not check them. It covers `vite build` and Rollup builds.
-- **Packages you already install.** A package in `node_modules` is better served from there; under Vite the plugin already prefers it.
+- **Packages you already install.** A package in `node_modules` is better served from there; under Vite and Rolldown the plugin already prefers it.
 
 ## Installation
 
@@ -162,7 +162,7 @@ Under `vite dev`, a fetched package is served by the dev server at `/@id/<name>`
 
 ## Rolldown
 
-`importCdn()` works as a Rolldown plugin as well, tested with Rolldown 1.2.16 and later: pass it in `plugins` as with Rollup. Rolldown does not call Rollup's `resolveImportMeta` hook, so the plugin writes the served URL in place of `import.meta.url` inside CDN modules itself, as under Vite.
+`importCdn()` works as a Rolldown plugin as well, tested with Rolldown 1.2.16 and later: pass it in `plugins` as with Rollup. As under Vite, a bare name goes to Rolldown's resolver first, so a package installed in `node_modules` is used from there and only names Rolldown cannot resolve are fetched. Rolldown does not call Rollup's `resolveImportMeta` hook, so the plugin writes the served URL in place of `import.meta.url` inside CDN modules itself, as under Vite.
 
 [`examples/rolldown`](examples/rolldown) is a runnable Rolldown build that imports `lodash-es` by bare name and by esm.sh URL, with pinned versions and a committed `cache`, so it builds offline.
 
