@@ -6,7 +6,8 @@ Releases use changesets (`.changeset/config.json`, `.changeset/README.md`), and 
 
 1. A change that should ship adds a changeset with `pnpm changeset`.
 2. On a push to `main`, `.github/workflows/release.yml` runs `changesets/action`, which opens or updates a version pull request that bumps `package.json` and writes `CHANGELOG.md`.
-3. Merging that pull request runs the workflow again, which runs `pnpm release` (`pnpm build && changeset publish`).
+3. The next step arms squash auto-merge on that pull request (`gh pr merge --squash --auto` on the action's `pr-number` output) with the same App token, so it lands once the required checks pass instead of waiting for a manual merge. The owner decided the release pull request auto-lands; `platform` and `openapi` use the same step.
+4. Merging that pull request runs the workflow again, which runs `pnpm release` (`pnpm build && changeset publish`).
 
 The action uses a `sferarc-hq` App token rather than `github.token`, because a version pull request merged by the Actions bot would push to `main` without triggering the workflow, and nothing would publish (comment in `release.yml`). The first step mints it with `actions/create-github-app-token` from the org secrets `HQ_APP_ID` and `HQ_APP_PRIVATE_KEY`, scoped to this repository with `contents` and `pull-requests` write, so version commits and the version pull request are authored by `sferarc-hq[bot]`. An App token, unlike `github.token`, still triggers `pull_request` workflows, so the version pull request gets the required `Check` job.
 
