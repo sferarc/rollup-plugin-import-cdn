@@ -1,5 +1,11 @@
 # rollup-plugin-import-cdn
 
+## 0.5.10
+
+### Patch Changes
+
+- af71bf7: Resolve a package installed in `node_modules` locally under standalone Rolldown, as under Vite, instead of fetching it from the CDN.
+
 ## 0.5.9
 
 ### Patch Changes
