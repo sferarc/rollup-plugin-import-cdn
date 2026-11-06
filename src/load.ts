@@ -339,7 +339,7 @@ const isCssRelativeReference = (value: string) =>
 const CSS_STRING = String.raw`"(?:[^"\\\n]|\\.)*"|'(?:[^'\\\n]|\\.)*'`;
 // Comments and other strings match too, so a `url(` inside one is skipped rather than rewritten.
 const CSS_REFERENCE = new RegExp(
-	String.raw`\/\*[\s\S]*?(?:\*\/|$)|@import\s+(${CSS_STRING})|\burl\(\s*(${CSS_STRING}|[^\s"'()\\]*)\s*\)|${CSS_STRING}`,
+	String.raw`\/\*[\s\S]*?(?:\*\/|$)|@import\s*(${CSS_STRING})|\burl\(\s*(${CSS_STRING}|[^\s"'()\\]*)\s*\)|${CSS_STRING}`,
 	"gi",
 );
 
