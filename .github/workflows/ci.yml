@@ -188,12 +188,14 @@ jobs:
 
       - run: test "$(pnpm exec rollup --version)" = "rollup v$ROLLUP_BETA"
 
+      - name: Typecheck
+        run: pnpm typecheck
+
       - name: Test
         run: pnpm test
 
       - name: Build
         run: pnpm build
 
-      # pnpm typecheck fails on Rollup 5 in src/test-utils.ts (#189), so only a consumer of dist is checked.
       - name: Typecheck the built types
         run: pnpm exec tsc -p types-check
