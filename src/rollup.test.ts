@@ -507,6 +507,37 @@ describe("Rollup build", () => {
 		expect(warnings.filter(({ code }) => code === "PLUGIN_WARNING")).toHaveLength(2);
 	});
 
+	it.skipIf(!hasOnLog)(
+		"logs at debug level, once each, the esm.sh URLs the on-disk cache skips",
+		async () => {
+			const { fetchImpl } = mockCdn(esmShGraph);
+			await writeFile(entry, ESM_SH_ENTRY);
+			const messages: string[] = [];
+			const bundle = await rollup({
+				input: entry,
+				logLevel: "debug",
+				onLog: (level, log) => {
+					if (level === "debug" && log.plugin === "plugin-import-cdn") messages.push(log.message);
+				},
+				plugins: [
+					skypackCdn({
+						fetchImpl,
+						priority: ["esm.sh"],
+						cache: path.join(dir, "cache"),
+						versions: { lib: "1.0.0", "lib-dom": "1.0.0" },
+					}),
+				],
+			});
+			await bundle.close();
+			const uncached = messages.flatMap(
+				(message) => /Not caching (\S+): /.exec(message)?.[1] ?? [],
+			);
+
+			// resolveId and load both fetch each URL, but each is logged once.
+			expect(uncached.sort()).toEqual(["https://esm.sh/node/process.mjs", ESM_SH_SCHED_RANGE]);
+		},
+	);
+
 	it("keeps two modules served from one URL apart when their bodies differ", async () => {
 		await writeFile(
 			entry,

@@ -1189,6 +1189,54 @@ describe("resolveDependency cache", () => {
 		expect(await readdir(cache)).toEqual([]);
 	});
 
+	it("should log at debug level an unpinned URL it does not cache", async () => {
+		const logger = spyLogger();
+		const options: PluginOptions = { cache, fetchImpl: countingFetch([]) };
+
+		await resolveDependency("preact", options, logger);
+
+		expect(logger.debug).toHaveBeenCalledExactlyOnceWith(
+			"Not caching https://esm.sh/preact: it is not pinned to an exact version, so every build fetches it",
+		);
+	});
+
+	it.each([
+		["the URL is pinned", () => ({ cache, versions: { preact: "10.19.3" } })],
+		["cache is not set", () => ({})],
+	])("should log nothing about caching when %s", async (_, extra) => {
+		const logger = spyLogger();
+
+		await resolveDependency("preact", { fetchImpl: countingFetch([]), ...extra() }, logger);
+
+		expect(logger.debug).not.toHaveBeenCalled();
+	});
+
+	it("should not log a failed attempt as uncached", async () => {
+		const logger = spyLogger();
+		const options: PluginOptions = {
+			cache,
+			fetchImpl: async (url) => ({ ok: false, status: 404, url, text: async () => "" }),
+		};
+
+		await expect(resolveDependency("preact", options, logger)).rejects.toThrow("HTTP 404");
+
+		expect(logger.debug).toHaveBeenCalledExactlyOnceWith(
+			"Failed to fetch preact from https://esm.sh/preact: HTTP 404",
+		);
+	});
+
+	it("should log an unpinned URL once across calls that share the uncached set", async () => {
+		const logger = spyLogger();
+		const uncached = new Set<string>();
+		const options: PluginOptions = { cache, fetchImpl: countingFetch([]) };
+
+		await resolveDependency("preact", options, logger, undefined, undefined, undefined, uncached);
+		await resolveDependency("preact", options, logger, undefined, undefined, undefined, uncached);
+
+		expect(logger.debug).toHaveBeenCalledOnce();
+		expect([...uncached]).toEqual(["https://esm.sh/preact"]);
+	});
+
 	it("should not cache without the option", async () => {
 		const calls: string[] = [];
 		const options: PluginOptions = {
