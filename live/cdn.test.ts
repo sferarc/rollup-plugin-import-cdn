@@ -401,6 +401,50 @@ describe("live esm.sh integrity", () => {
 			build({ input: entry, plugins: [importCdn({ ...options, integrity: tampered })] }),
 		).rejects.toThrow(`Integrity check failed for ${stub}`);
 	});
+
+	it("builds with the values the README's integrity: {} debug-log recipe collects", async () => {
+		const entry = path.join(dir, "index.js");
+		await writeFile(entry, 'import _ from "lodash";\nconsole.log(_.chunk);');
+		const rawHashes: Record<string, string> = {};
+		const hashing: FetchImpl = async (url, init) => {
+			const response = await fetch(url, init);
+			const bytes = new Uint8Array(await response.clone().arrayBuffer());
+			const value = `sha384-${createHash("sha384").update(bytes).digest("base64")}`;
+			rawHashes[url] = value;
+			rawHashes[response.url] = value;
+			return response;
+		};
+		const options = { priority: ["esm.sh" as const], versions: { lodash: LODASH } };
+
+		const messages: string[] = [];
+		const bundle = await rollup({
+			input: entry,
+			logLevel: "debug",
+			onLog: (level, log) => {
+				if (level === "warn") expect.fail(log.message);
+				if (level === "debug" && log.plugin === "plugin-import-cdn") messages.push(log.message);
+			},
+			plugins: [importCdn({ ...options, fetchImpl: hashing, integrity: {} })],
+		});
+		const { output } = await bundle.generate({ format: "es" });
+		await bundle.close();
+		const collected: Record<string, string> = {};
+		for (const message of messages) {
+			const hint = /No integrity entry for (\S+): (sha384-\S+)$/.exec(message);
+			if (hint?.[1] && hint[2]) collected[hint[1]] = hint[2];
+		}
+
+		expect(Object.keys(collected)).toContain(`https://esm.sh/lodash@${LODASH}`);
+		expect(Object.keys(collected).length).toBeGreaterThan(1);
+		for (const [url, value] of Object.entries(collected)) expect(value).toBe(rawHashes[url]);
+
+		// `build` fails on any warning, so every collected entry also has to match a fetched URL.
+		const checked = await build({
+			input: entry,
+			plugins: [importCdn({ ...options, integrity: collected })],
+		});
+		expect(checked.code).toBe(output[0].code);
+	});
 });
 
 // The README's Sourcemaps paragraph names this exact URL as an example source.
