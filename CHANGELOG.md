@@ -1,5 +1,11 @@
 # rollup-plugin-import-cdn
 
+## 0.5.8
+
+### Patch Changes
+
+- c7bb98b: Document how TypeScript sources type CDN imports: a types-only `@types` package for a bare name, and a `declare module` for a URL that re-exports the installed types.
+
 ## 0.5.7
 
 ### Patch Changes
