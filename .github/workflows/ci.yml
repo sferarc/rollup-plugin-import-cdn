@@ -48,6 +48,10 @@ jobs:
       - name: Build
         run: pnpm build
 
+      # node16 resolution takes the import or require condition, so each needs declarations of its own format.
+      - name: Typecheck the built types under node16
+        run: pnpm typecheck:dist
+
       # Consumers rely on unused exports being dropped from their bundles.
       - name: Tree-shakable
         run: pnpm is-tree-shakable
