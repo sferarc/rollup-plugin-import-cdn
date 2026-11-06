@@ -52,6 +52,10 @@ jobs:
       - name: Tree-shakable
         run: pnpm is-tree-shakable
 
+      # High or critical advisories in what the package ships; accepted ones are in pnpm-workspace.yaml auditConfig.
+      - name: Runtime advisories
+        run: pnpm audit --prod --audit-level high
+
   # A separate job so the required Check name stays as it is.
   min-node:
     name: Test (minimum Node)
