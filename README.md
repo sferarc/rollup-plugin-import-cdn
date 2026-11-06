@@ -164,6 +164,26 @@ Under `vite dev`, a fetched package is served by the dev server at `/@id/<name>`
 
 `importCdn()` works as a Rolldown plugin as well, tested with Rolldown 1.2.16 and later: pass it in `plugins` as with Rollup. Rolldown does not call Rollup's `resolveImportMeta` hook, so the plugin writes the served URL in place of `import.meta.url` inside CDN modules itself, as under Vite.
 
+## TypeScript
+
+`tsc` checks your sources before the bundler runs, and it cannot see what the plugin fetches, so a CDN import fails with `TS2307: Cannot find module` until you give it types.
+
+For a bare name such as `lodash-es`, install only its types as a dev dependency: `npm install -D @types/lodash-es`. TypeScript resolves `import { debounce } from "lodash-es"` to them while the code still comes from the CDN, since nothing installs `lodash-es` itself. For a package that ships its own types there is no types-only package, so type it as a URL import below; installing the package makes Vite use it from `node_modules` instead of the CDN.
+
+For a URL import, declare the URL as a module in a `.d.ts` file your `tsconfig.json` includes, and re-export the types of the package it serves:
+
+```ts
+// cdn-modules.d.ts: no top-level import or export, or TypeScript reads these as augmentations and rejects the URLs.
+declare module "https://esm.sh/canvas-confetti" {
+  export { default } from "canvas-confetti";
+}
+
+// Any other esm.sh import, typed as `any`.
+declare module "https://esm.sh/*";
+```
+
+Here `canvas-confetti` resolves to `@types/canvas-confetti`, installed as a dev dependency. The wildcard line is the fallback for URLs you have no types for; it accepts any use of them. [`types-check/cdn-imports.ts`](types-check/cdn-imports.ts) is checked against this pattern in CI.
+
 ## Documentation
 
 This README is the reference for the plugin's options and behaviour. The [CHANGELOG](CHANGELOG.md) lists changes by release.
