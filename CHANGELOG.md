@@ -1,5 +1,11 @@
 # rollup-plugin-import-cdn
 
+## 0.5.14
+
+### Patch Changes
+
+- 6884ae3: With `cache` set, log each fetched URL that is not pinned to an exact version at debug level, as `Not caching <url>: it is not pinned to an exact version, so every build fetches it`, once per build. One build with `logLevel: "debug"` lists the imports, including esm.sh ranges and `/node/` polyfills, that still need the network.
+
 ## 0.5.13
 
 ### Patch Changes
