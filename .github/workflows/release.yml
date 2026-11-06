@@ -49,9 +49,24 @@ jobs:
       # trusted publishing needs npm 11.5.1 or newer.
       - uses: jdx/mise-action@6612f0ef07ed2a736cd1e00a94a065522dd41195 # v5.2.5
 
-      - run: pnpm install --frozen-lockfile
+      # npm lists a publish minutes after it lands, so a push in that window would
+      # publish the version again and fail with 409; the pushed tag marks it done.
+      - name: Check for unreleased work
+        id: pending
+        run: |
+          version=$(node -p "require('./package.json').version")
+          if git ls-remote --exit-code --tags origin "refs/tags/v$version" > /dev/null \
+            && [ -z "$(find .changeset -name '*.md' ! -name README.md)" ]; then
+            echo "Nothing to release: v$version is tagged and no changeset is pending."
+          else
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - if: steps.pending.outputs.run == 'true'
+        run: pnpm install --frozen-lockfile
 
       - name: Create version PR or publish
+        if: steps.pending.outputs.run == 'true'
         id: changesets
         uses: changesets/action@ae32849d5ba541f9ae29e40e22a623bc13562f51 # v2.1.2
         with:
