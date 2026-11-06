@@ -24,8 +24,13 @@ export function hooks(plugin: Plugin, { context, logs } = fakeContext()) {
 		resolveId: async (id: string, importer?: string) =>
 			handlerOf("resolveId", plugin.resolveId).call(context, id, importer, {
 				attributes: {},
+				importerAttributes: {},
 				isEntry: false,
 			}),
-		load: async (id: string) => handlerOf("load", plugin.load).call(context, id),
+		load: async (id: string) => {
+			// Rollup 5 requires rawId, which Rollup 4's load options reject as an excess property in a literal.
+			const loadOptions = { attributes: {}, rawId: id };
+			return handlerOf("load", plugin.load).call(context, id, loadOptions);
+		},
 	};
 }
