@@ -12,10 +12,15 @@
 6. `pnpm typecheck`
 7. `pnpm test`
 8. `pnpm build`
-9. `pnpm is-tree-shakable`, because consumers rely on unused exports being dropped from their bundles.
-10. `pnpm audit --prod --audit-level high` (#196), below.
+9. `pnpm typecheck:dist` (#207), below.
+10. `pnpm is-tree-shakable`, because consumers rely on unused exports being dropped from their bundles.
+11. `pnpm audit --prod --audit-level high` (#196), below.
 
-`pnpm check` in `package.json` chains steps 3 to 9 for local runs. The workflow keeps them as separate named steps so a failure names the failing check; change both together. Step 10 stays out of `pnpm check`: its result depends on the advisory database, not on the code.
+`pnpm check` in `package.json` chains steps 3 to 10 for local runs. The workflow keeps them as separate named steps so a failure names the failing check; change both together. Step 11 stays out of `pnpm check`: its result depends on the advisory database, not on the code.
+
+## Built types under node16
+
+`pnpm typecheck:dist` compiles `types-check/cjs/` against the built `dist` with `module` and `moduleResolution` set to `node16`: `require.cts` resolves the package through the `require` condition and `import.mts` through `import`. `types-check/` itself uses `bundler` resolution, which never takes the `require` path, so before #207 the CommonJS declarations went unchecked. With the old shared `dist/index.d.ts`, `require.cts` fails with TS1479, since TypeScript reads a `.d.ts` in a `"type": "module"` package as ESM (checked on TypeScript 7.0.2 on 2026-11-06). The floor jobs do not run it; they keep `pnpm exec tsc -p types-check`.
 
 ## Runtime advisories
 

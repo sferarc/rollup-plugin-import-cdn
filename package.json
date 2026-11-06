@@ -33,9 +33,14 @@
 	],
 	"exports": {
 		".": {
-			"types": "./dist/index.d.ts",
-			"import": "./dist/index.mjs",
-			"require": "./dist/index.cjs"
+			"import": {
+				"types": "./dist/index.d.ts",
+				"default": "./dist/index.mjs"
+			},
+			"require": {
+				"types": "./dist/index.d.cts",
+				"default": "./dist/index.cjs"
+			}
 		}
 	},
 	"main": "./dist/index.cjs",
@@ -51,11 +56,12 @@
 		"test:watch": "vitest",
 		"test:live": "vitest run --config vitest.live.config.ts",
 		"typecheck": "tsc --noEmit",
+		"typecheck:dist": "tsc -p types-check/cjs",
 		"lint": "biome check .",
 		"fix": "biome check --write .",
 		"knip": "knip",
 		"is-tree-shakable": "is-tree-shakable",
-		"check": "pnpm lint && pnpm exec lefthook validate && pnpm knip && pnpm typecheck && pnpm test && pnpm build && pnpm is-tree-shakable",
+		"check": "pnpm lint && pnpm exec lefthook validate && pnpm knip && pnpm typecheck && pnpm test && pnpm build && pnpm typecheck:dist && pnpm is-tree-shakable",
 		"changeset": "changeset",
 		"release": "pnpm build && changeset publish",
 		"clean": "rm -rf dist node_modules"
