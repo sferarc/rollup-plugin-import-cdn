@@ -331,6 +331,48 @@ describe("importCdn", () => {
 
 			expect(fetchImpl).toHaveBeenCalledTimes(2);
 		});
+
+		it("reuses the response of a pinned URL after buildStart", async () => {
+			const fetchImpl = vi.fn(
+				createMockFetch({ "https://esm.sh/memo@1.0.0": "export const memo = 1;" }),
+			);
+			const plugin = importCdn({ fetchImpl, versions: { memo: "1.0.0" } });
+			const { buildStart, resolveId, load } = hooks(plugin);
+
+			buildStart();
+			await resolveId("memo");
+			await load("memo");
+			buildStart();
+			await resolveId("memo");
+
+			expect(await load("memo")).toBe("export const memo = 1;");
+			expect(fetchImpl).toHaveBeenCalledTimes(1);
+		});
+
+		it.each([
+			["a non-OK status", { ok: false, status: 404, body: "Not found" }],
+			["an HTML page", { ok: true, status: 200, body: "<!doctype html><title>Portal</title>" }],
+		])("refetches a pinned URL after buildStart when it answered with %s", async (_, first) => {
+			const url = "https://esm.sh/memo@1.0.0";
+			const fetchImpl = vi
+				.fn<FetchImpl>()
+				.mockResolvedValueOnce({ ...first, url, text: async () => first.body })
+				.mockResolvedValue({
+					ok: true,
+					status: 200,
+					url,
+					text: async () => "export const memo = 1;",
+				});
+			const plugin = importCdn({ fetchImpl, versions: { memo: "1.0.0" } });
+			const { buildStart, resolveId } = hooks(plugin);
+
+			buildStart();
+			await expect(resolveId("memo")).rejects.toThrow(url);
+			buildStart();
+
+			expect(await resolveId("memo")).toBe("memo");
+			expect(fetchImpl).toHaveBeenCalledTimes(2);
+		});
 	});
 
 	describe("request timeout", () => {

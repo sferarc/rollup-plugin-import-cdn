@@ -203,13 +203,15 @@ function formatAttempts(name: string, attempts: { url: string; reason: string }[
 		.join("\n");
 }
 
-// `checked` collects the URLs a returned module was verified against, `hinted` those logged without an entry.
+// `checked` collects the URLs a returned module was verified against, `hinted` those logged without
+// an entry, `reusable` the pinned URLs whose fetched response was returned.
 export async function resolveDependency(
 	name: string,
 	options: PluginOptions,
 	logger: Logger = silent,
 	checked?: Set<string>,
 	hinted?: Set<string>,
+	reusable?: Set<string>,
 ): Promise<Dependency | null> {
 	const urls = resolveDependencyUrls(name, options);
 	if (urls.length === 0) return null;
@@ -301,6 +303,7 @@ export async function resolveDependency(
 		// Outside the try: a mismatch means tampered content, so it fails rather than trying the next CDN.
 		verify([cdnUrl, fetched.url], fetched.main);
 		if (cacheable) await writeCache(cache, cdnUrl, fetched, logger);
+		if (isPinnedUrl(cdnUrl)) reusable?.add(cdnUrl);
 
 		return { name, ...fetched };
 	}

@@ -242,6 +242,8 @@ export function importCdn(pluginOptions: ImportCdnOptions = {}): ImportCdnPlugin
 	// resolveId and load both resolve the same id, so each URL is fetched once per build.
 	// A failure, timeouts included, is kept too, so a hanging CDN costs one timeout per URL.
 	const responses = new Map<string, Promise<FetchedResponse>>();
+	// A pinned URL's code never changes, so a watch rebuild reuses a response a build accepted.
+	const reusable = new Set<string>();
 
 	const fetchImpl: FetchImpl = async (url) => {
 		let pending = responses.get(url);
@@ -290,7 +292,7 @@ export function importCdn(pluginOptions: ImportCdnOptions = {}): ImportCdnPlugin
 		},
 		buildStart() {
 			isRolldown = this.meta.rolldownVersion !== undefined;
-			responses.clear();
+			for (const url of responses.keys()) if (!reusable.has(url)) responses.delete(url);
 			moduleUrls.clear();
 			modulesByUrl.clear();
 			checkedIntegrity.clear();
@@ -332,6 +334,7 @@ export function importCdn(pluginOptions: ImportCdnOptions = {}): ImportCdnPlugin
 				contextLogger(this),
 				checkedIntegrity,
 				hintedIntegrity,
+				reusable,
 			);
 			if (!dependency) return;
 			// Only an identical body is shared, so an integrity entry on either URL still covers it.
@@ -350,6 +353,7 @@ export function importCdn(pluginOptions: ImportCdnOptions = {}): ImportCdnPlugin
 				contextLogger(this),
 				checkedIntegrity,
 				hintedIntegrity,
+				reusable,
 			);
 			if (!dependency) return;
 			// A rebuild from Rollup's cache reuses resolved ids and skips resolveId, but not load.
