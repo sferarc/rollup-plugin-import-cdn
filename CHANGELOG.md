@@ -1,5 +1,11 @@
 # rollup-plugin-import-cdn
 
+## 0.5.13
+
+### Patch Changes
+
+- 39c2523: Document importing a JSON file from a CDN: Vite and Rolldown bundle it as JSON, and a Rollup build needs `@rollup/plugin-json`.
+
 ## 0.5.12
 
 ### Patch Changes
