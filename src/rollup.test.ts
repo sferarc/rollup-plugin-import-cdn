@@ -529,7 +529,7 @@ describe("Rollup build", () => {
 		expect(code).toContain('"HELPER"');
 	});
 
-	it("refetches every URL when the same plugin instance builds again", async () => {
+	it("refetches unpinned URLs and reuses pinned ones when the same plugin instance builds again", async () => {
 		const { fetchImpl, fetchCounts } = mockCdn();
 		const plugin = skypackCdn({ fetchImpl });
 
@@ -537,7 +537,13 @@ describe("Rollup build", () => {
 		const second = await build({ input: entry, plugins: [plugin] });
 
 		expect(second).toBe(first);
-		expect(Object.values(fetchCounts())).toEqual([2, 2, 2, 2, 2]);
+		expect(fetchCounts()).toEqual({
+			[PKG_A]: 2,
+			[PKG_B]: 2,
+			[HELPER]: 1,
+			[SHARED]: 1,
+			[DIRECT]: 2,
+		});
 	});
 
 	it("rebuilds from the on-disk cache with a fetchImpl that throws", async () => {
@@ -606,7 +612,7 @@ describe("Rollup build", () => {
 		expect(fetchCounts()).toEqual({ [DIRECT]: 1 });
 	});
 
-	it("rebuilds in watch mode with Rollup's cache on, refetching and keeping one copy of a shared module", async () => {
+	it("rebuilds in watch mode with Rollup's cache on, refetching unpinned URLs and keeping one copy of a shared module", async () => {
 		await writeFile(
 			entry,
 			[
@@ -642,12 +648,13 @@ describe("Rollup build", () => {
 			expect(second.match(/const used\S* =/g)).toHaveLength(1);
 			expect(second).toContain('"HELPER"');
 			expect(second).toContain('"SHARED"');
-			// Rollup's watch cache reuses resolved ids, so the redirect URL is not resolved again.
+			// Rollup's watch cache reuses resolved ids, so the redirect URL is not resolved again,
+			// and the pinned HELPER and SHARED responses are reused without `cache`.
 			expect(fetchCounts()).toEqual({
 				[PKG_A]: 2,
 				[PKG_A_REDIRECT]: 1,
-				[HELPER]: 2,
-				[SHARED]: 2,
+				[HELPER]: 1,
+				[SHARED]: 1,
 				[PKG_B]: 2,
 			});
 		} finally {

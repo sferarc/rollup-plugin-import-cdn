@@ -174,7 +174,7 @@ describe("Vite build", () => {
 		expect(fetchImpl).not.toHaveBeenCalled();
 	});
 
-	it("rebuilds under vite build --watch, refetching and bundling a newly added URL import", async () => {
+	it("rebuilds under vite build --watch, refetching unpinned URLs and bundling a newly added URL import", async () => {
 		const fetchImpl = mockCdn();
 		await writeFile(
 			path.join(root, "main.js"),
@@ -230,13 +230,13 @@ describe("Vite build", () => {
 				expect(second).toContain(marker);
 			expect(second).not.toContain('"V1"');
 			expect(second).not.toMatch(/\bfrom\s*["']https?:/);
-			// buildStart clears the per-build memo, so the rebuild fetches pkg-a's graph again.
+			// buildStart drops unpinned responses, so the rebuild refetches all but the pinned HELPER.
 			expect(
 				fetchImpl.mock.calls
 					.slice(3)
 					.map(([url]) => url)
 					.sort(),
-			).toEqual([DIRECT, HELPER, PKG_A, PKG_B].sort());
+			).toEqual([DIRECT, PKG_A, PKG_B].sort());
 		} finally {
 			await watcher.close();
 		}
