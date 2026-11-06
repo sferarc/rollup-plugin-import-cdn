@@ -330,7 +330,36 @@ export async function loadHook(key: string, options: PluginOptions, logger: Logg
 // Matches `.url` after `import.meta`, but not `.urls` or an assignment a literal cannot take.
 const IMPORT_META_URL = /\s*\.\s*url(?![\w$])(?!\s*=(?!=))/y;
 
+const isStylesheet = (url: string) => URL.canParse(url) && /\.css$/i.test(new URL(url).pathname);
+
+// `fonts/x.woff2`, `./x`, `/x` or `//host/x`; not `data:`, `https:`, `#id` (an SVG reference) or empty.
+const isCssRelativeReference = (value: string) =>
+	value !== "" && !value.startsWith("#") && !/^[a-z][a-z\d+.-]*:/i.test(value);
+
+const CSS_STRING = String.raw`"(?:[^"\\\n]|\\.)*"|'(?:[^'\\\n]|\\.)*'`;
+// Comments and other strings match too, so a `url(` inside one is skipped rather than rewritten.
+const CSS_REFERENCE = new RegExp(
+	String.raw`\/\*[\s\S]*?(?:\*\/|$)|@import\s+(${CSS_STRING})|\burl\(\s*(${CSS_STRING}|[^\s"'()\\]*)\s*\)|${CSS_STRING}`,
+	"gi",
+);
+
+// Emitted with the app's CSS, a relative reference would resolve against the app instead of the CDN.
+function rewriteStylesheet({ url, main }: Dependency) {
+	return main.replace(CSS_REFERENCE, (match, imported?: string, linked?: string) => {
+		const reference = imported ?? linked;
+		if (reference === undefined) return match;
+		const value = /^["']/.test(reference) ? reference.slice(1, -1) : reference;
+		// A CSS escape would need decoding first; such references are rare enough to leave.
+		if (value.includes("\\") || !isCssRelativeReference(value)) return match;
+		const href = new URL(value, url).href.replace(/["\\]/g, "\\$&");
+		const at = match.lastIndexOf(reference);
+		return `${match.slice(0, at)}"${href}"${match.slice(at + reference.length)}`;
+	});
+}
+
 export async function rewriteImports(dependency: Dependency, { inlineImportMetaUrl = false } = {}) {
+	if (isStylesheet(dependency.url)) return rewriteStylesheet(dependency);
+
 	await init();
 
 	const { main } = dependency;
