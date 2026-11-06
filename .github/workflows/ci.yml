@@ -135,6 +135,34 @@ jobs:
       - name: Typecheck the built types
         run: pnpm exec tsc -p types-check
 
+  # Runs the suite on the lowest Rolldown that package.json compatiblePackages declares.
+  rolldown-floor:
+    name: Test (Rolldown floor)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: jdx/mise-action@6612f0ef07ed2a736cd1e00a94a065522dd41195 # v5.2.5
+
+      - name: Pin Rolldown to the compatiblePackages floor
+        run: |
+          version="$(jq -r '.compatiblePackages.rolldown.versions' package.json | sed 's/^\^//')"
+          echo "ROLLDOWN_FLOOR=$version" >> "$GITHUB_ENV"
+          sed -i "s/^  rolldown: .*/  rolldown: $version/" pnpm-workspace.yaml
+
+      - run: pnpm install --no-frozen-lockfile
+
+      - run: test "$(pnpm exec rolldown --version)" = "rolldown v$ROLLDOWN_FLOOR"
+
+      - name: Test
+        run: pnpm test
+
+      - name: Build
+        run: pnpm build
+
+      - name: Typecheck the built types
+        run: pnpm exec tsc -p types-check
+
   # Runs the suite on Rollup's next major beta; not required, so an upstream regression never blocks a PR.
   rollup-beta:
     name: Test (Rollup beta)

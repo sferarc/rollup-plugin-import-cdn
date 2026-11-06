@@ -1,6 +1,6 @@
 # CI
 
-`.github/workflows/ci.yml` runs on pushes to `main` and on every pull request. Five jobs, `Check`, `Test (minimum Node)`, `Test (Rollup 3.0)`, `Test (Vite 8.1)` and `Test (Rollup beta)`, all on `ubuntu-latest`: the repository is public, so it uses GitHub-hosted runners (comment in the workflow).
+`.github/workflows/ci.yml` runs on pushes to `main` and on every pull request. Six jobs, `Check`, `Test (minimum Node)`, `Test (Rollup 3.0)`, `Test (Vite 8.1)`, `Test (Rolldown floor)` and `Test (Rollup beta)`, all on `ubuntu-latest`: the repository is public, so it uses GitHub-hosted runners (comment in the workflow).
 
 ## Check steps
 
@@ -45,11 +45,15 @@ The suite passed on Rollup 3.0.0 apart from the `onLog` test, which `src/rollup.
 
 ## Vite 8.1 job
 
-`Test (Vite 8.1)` (#164) runs the suite on the lowest Vite the optional peer range accepts, the same way as the Rollup 3 job: `sed` rewrites the `vite` catalog line to 8.1.0, `pnpm install --no-frozen-lockfile`, a check that `vite --version` starts with `vite/8.1.0`, then `pnpm test`. vitest's own `vite` dependency dedupes to the pinned version, so vitest runs on it too. It then runs `pnpm build` and `pnpm exec tsc -p types-check` as the Rollup 3 job does (#183), so `types-check/vite.ts` checks that the published `importCdn()` type is a Vite 8.1.0 `Plugin` and fits `UserConfig.plugins`. `types-check/rolldown.ts` does the same for Rolldown's `Plugin` and `InputOptions`; the catalog Rolldown is the `compatiblePackages` floor, so both jobs check it there. Every file in `types-check/` compiles in both jobs. On 2026-11-05 all three files passed against `dist` on Vite 8.1.0 and on Rollup 3.0.0, and each failed with `name` typed as `number` in the built `ImportCdnPlugin`.
+`Test (Vite 8.1)` (#164) runs the suite on the lowest Vite the optional peer range accepts, the same way as the Rollup 3 job: `sed` rewrites the `vite` catalog line to 8.1.0, `pnpm install --no-frozen-lockfile`, a check that `vite --version` starts with `vite/8.1.0`, then `pnpm test`. vitest's own `vite` dependency dedupes to the pinned version, so vitest runs on it too. It then runs `pnpm build` and `pnpm exec tsc -p types-check` as the Rollup 3 job does (#183), so `types-check/vite.ts` checks that the published `importCdn()` type is a Vite 8.1.0 `Plugin` and fits `UserConfig.plugins`. `types-check/rolldown.ts` does the same for Rolldown's `Plugin` and `InputOptions`, on the catalog Rolldown; the Rolldown floor job below checks it on the `compatiblePackages` floor. Every file in `types-check/` compiles in both jobs. On 2026-11-05 all three files passed against `dist` on Vite 8.1.0 and on Rollup 3.0.0, and each failed with `name` typed as `number` in the built `ImportCdnPlugin`.
 
 The range was `^8.0.0` (#157) and is now `^8.1.0`. On 2026-11-05, Vite 8.0.0 and 8.0.16 failed two tests in `src/vite.test.ts`: "names a CDN module in the sourcemap by the URL it was served from", where `sources` kept cwd-relative paths such as `../../<cwd>/pkg-a` and nothing was on the ignore list, so the `outputOptions` sourcemap hook had no effect ([[architecture/import-rewriting]]); and "rebuilds under vite build --watch", which saw no rebuild within 30 seconds. Whether the watch failure also happens on Linux, or only with macOS polling, is unknown. Vite 8.1.0, 8.2.0, 8.3.0 and 8.3.5 passed every test in that file and `src/examples.test.ts`, and 8.1.0 passed the whole suite.
 
 Locally on macOS, every `src/vite.test.ts` test fails on Vite 8.0.x and 8.1.x when the temp root sits under the default `TMPDIR`, a `/var/folders` path behind the `/var` to `/private/var` symlink: a plain `vite build` without the plugin fails there too (`vite:build-html` emits `../../private/var/...` as a file name), so it is a Vite bug, fixed by 8.2.0. Set `TMPDIR` to a path with no symlink, such as one under `/private/tmp`, to run the suite on 8.1.0 locally. `ubuntu-latest` has no such symlink.
+
+## Rolldown floor job
+
+`Test (Rolldown floor)` (#198) runs the suite on the lowest Rolldown that `compatiblePackages.rolldown.versions` in `package.json` declares, the range the Vite plugin registry shows ([[architecture/overview]]). Like the minimum Node job it reads the floor from `package.json` (`jq`, leading `^` stripped), so raising the range moves the job with it; then, like the Rollup 3 job, it rewrites the `rolldown` catalog line with `sed`, runs `pnpm install --no-frozen-lockfile`, asserts `rolldown --version` prints `rolldown v<floor>`, and runs `pnpm test`, `pnpm build` and `pnpm exec tsc -p types-check`, so `src/rolldown.test.ts` and `types-check/rolldown.ts` run on the floor. Before it, the floor was covered only while the catalog pin sat on it, so the first catalog bump would have left the advertised floor untested. When it landed the catalog pin and the floor were both 1.2.16, so the job repeats what `Check` and the other floor jobs run until the catalog moves.
 
 ## Rollup beta job
 
