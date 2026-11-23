@@ -178,7 +178,9 @@ describe("Rolldown build", () => {
 			true,
 		);
 		const maps = chunks.flatMap((chunk) => (chunk.map ? [chunk.map] : []));
-		const sources = maps.flatMap((map) => map.sources);
+		const sources = maps.flatMap((map) =>
+			map.sources.filter((source): source is string => source !== null),
+		);
 		const ignored = maps.flatMap((map) =>
 			(map.x_google_ignoreList ?? []).map((index) => map.sources[index]),
 		);
